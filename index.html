@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Recomp Tracker" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <title>3-Day Body Recomp Tracker</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-2: #0b1220;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-dark: #0284c7;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); max-width: 640px; margin: 0 auto; padding-bottom: 112px; min-height: 100vh; }
+
+    /* Top Header */
+    .topbar { position: sticky; top: 0; z-index: 40; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
+    .menu-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 40px; height: 40px; border-radius: 10px; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .brand h1 { font-size: 1.05rem; font-weight: 700; line-height: 1.2; }
+    .brand small { font-size: 0.72rem; color: var(--muted); }
+    .badge { background: var(--accent-dark); color: #fff; padding: 5px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; white-space: nowrap; }
+
+    /* Install Banner */
+    .install-banner { display: none; margin: 12px 14px 0; padding: 10px 12px; background: rgba(56, 189, 248, 0.12); border: 1px solid var(--accent); border-radius: 12px; align-items: center; justify-content: space-between; gap: 10px; }
+    .install-banner.show { display: flex; }
+    .install-banner span { font-size: 0.82rem; color: var(--text); }
+    .install-btn { background: var(--accent); color: #0f172a; border: none; padding: 7px 12px; border-radius: 8px; font-weight: 700; font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
+
+    /* Main Container */
+    main { padding: 14px; }
+
+    /* Day Tabs */
+    .day-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .day-tab { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 10px 6px; border-radius: 10px; font-weight: 700; font-size: 0.82rem; text-align: center; cursor: pointer; }
+    .day-tab.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+    .ex-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
+    .ex-title { font-size: 1rem; font-weight: 700; }
+    .guide-btn { background: rgba(56, 189, 248, 0.14); border: 1px solid var(--accent); color: var(--accent); padding: 5px 9px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .ex-target { font-size: 0.76rem; color: var(--accent); margin-bottom: 8px; }
+    .ex-note { font-size: 0.82rem; color: var(--muted); line-height: 1.4; margin-bottom: 10px; background: rgba(15, 23, 42, 0.55); padding: 8px 10px; border-radius: 8px; }
+
+    /* Exercise-Specific Timers */
+    .timer-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .chip { background: rgba(245, 158, 11, 0.14); border: 1px solid var(--warn); color: var(--warn); padding: 5px 9px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; }
+
+    /* Writable Sets */
+    .set-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .set-label { width: 46px; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+    .set-input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 9px 10px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; min-width: 0; }
+    .set-input:focus { outline: none; border-color: var(--accent); }
+    .set-done { width: 82px; padding: 9px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-size: 0.8rem; font-weight: 700; cursor: pointer; }
+    .set-done.done { background: var(--success); border-color: var(--success); color: #052e16; }
+    .set-controls { display: flex; gap: 8px; margin-top: 6px; }
+    .small-btn { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); padding: 6px 10px; border-radius: 8px; font-size: 0.74rem; font-weight: 600; cursor: pointer; }
+
+    /* Action Buttons */
+    .primary-btn { width: 100%; padding: 14px; background: var(--success); color: #052e16; border: none; border-radius: 12px; font-size: 0.98rem; font-weight: 800; cursor: pointer; margin-top: 6px; }
+    .btn-accent { background: var(--accent); color: #0f172a; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 700; font-size: 0.84rem; cursor: pointer; }
+    .btn-outline { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); padding: 10px 14px; border-radius: 10px; font-weight: 700; font-size: 0.84rem; cursor: pointer; }
+    .btn-danger { background: rgba(239, 68, 68, 0.16); color: #fca5a5; border: 1px solid var(--danger); padding: 10px 14px; border-radius: 10px; font-weight: 700; font-size: 0.84rem; cursor: pointer; }
+
+    /* Bottom Sticky Timer */
+    .timer-bar { position: fixed; bottom: 0; left: 0; right: 0; max-width: 640px; margin: 0 auto; background: #020617; border-top: 1px solid var(--border); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 8px; z-index: 45; }
+    .timer-meta { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .timer-clock { font-size: 1.4rem; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .timer-clock.hold { color: var(--warn); }
+    .timer-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+    .t-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 7px 9px; border-radius: 8px; font-size: 0.74rem; font-weight: 700; cursor: pointer; }
+    .t-btn.stop { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+
+    /* Slide-Out Hamburger Drawer */
+    .drawer-backdrop { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.72); z-index: 70; display: none; }
+    .drawer-backdrop.open { display: block; }
+    .drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 270px; max-width: 82vw; background: var(--surface); border-right: 1px solid var(--border); z-index: 75; transform: translateX(-100%); transition: transform 0.2s ease; display: flex; flex-direction: column; padding: 18px 14px; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; color: var(--text); padding: 12px; border-radius: 10px; font-size: 0.92rem; font-weight: 700; cursor: pointer; margin-bottom: 6px; }
+    .nav-item.active { background: rgba(56, 189, 248, 0.16); border-color: var(--accent); color: var(--accent); }
+
+    /* Single-Back-Button Animated Form Guide Overlay */
+    .overlay { position: fixed; inset: 0; background: var(--bg); z-index: 80; display: none; flex-direction: column; overflow-y: auto; max-width: 640px; margin: 0 auto; }
+    .overlay.open { display: flex; }
+    .overlay-top { position: sticky; top: 0; background: rgba(15, 23, 42, 0.96); border-bottom: 1px solid var(--border); padding: 12px 14px; display: flex; align-items: center; gap: 12px; z-index: 10; }
+    .back-btn { background: var(--accent); color: #0f172a; border: none; padding: 8px 14px; border-radius: 10px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
+    .overlay-body { padding: 16px 14px 40px; }
+    .svg-stage { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; justify-content: center; align-items: center; margin-bottom: 14px; min-height: 210px; }
+    .cue-list { list-style: none; margin: 10px 0 16px; }
+    .cue-list li { padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--accent); border-radius: 6px; margin-bottom: 8px; font-size: 0.86rem; line-height: 1.4; }
+    .row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+    /* Charts, History, Backup, Reminders */
+    .section-title { font-size: 1.1rem; font-weight: 800; margin-bottom: 12px; }
+    select, textarea, input[type="time"] { width: 100%; background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 10px; font-size: 0.88rem; margin-bottom: 10px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .stat-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 8px; text-align: center; }
+    .stat-val { font-size: 1.1rem; font-weight: 800; color: var(--accent); }
+    .stat-lbl { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+    .pill-row { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .pill { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); padding: 7px 11px; border-radius: 999px; font-size: 0.76rem; font-weight: 700; cursor: pointer; }
+    .pill.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .chart-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+    .day-chip-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 12px; }
+    .day-chip { padding: 9px 4px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: 0.74rem; font-weight: 700; text-align: center; cursor: pointer; }
+    .day-chip.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+    .hist-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+    .hist-head { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .hist-detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 0.82rem; color: var(--muted); display: none; }
+    .hist-detail.open { display: block; }
+    .toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); background: var(--success); color: #052e16; padding: 9px 16px; border-radius: 999px; font-weight: 800; font-size: 0.82rem; z-index: 95; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+    .toast.show { display: block; }
+  </style>
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <button class="menu-btn" onclick="openDrawer()" aria-label="Open menu">☰</button>
+      <div class="brand">
+        <h1>3-Day Recomp Tracker</h1>
+        <small>Mon / Wed / Fri Home Plan</small>
+      </div>
+    </div>
+    <div class="badge" id="weeklyBadge">0 / 3 Week</div>
+  </header>
+
+  <!-- PWA Install Prompt Banner -->
+  <div id="installBanner" class="install-banner">
+    <span>Install this tracker on your home screen for offline use.</span>
+    <button class="install-btn" id="installBtn">Install App</button>
+  </div>
+
+  <!-- Slide-out Navigation Drawer -->
+  <div id="drawerBackdrop" class="drawer-backdrop" onclick="closeDrawer()"></div>
+  <aside id="drawer" class="drawer">
+    <div class="drawer-header">
+      <strong>Navigation</strong>
+      <button class="small-btn" onclick="closeDrawer()">✕</button>
+    </div>
+    <button class="nav-item active" data-view="workouts" onclick="setView('workouts')">🏋️ Workouts</button>
+    <button class="nav-item" data-view="charts" onclick="setView('charts')">📈 Progress Charts</button>
+    <button class="nav-item" data-view="history" onclick="setView('history')">📅 Workout History</button>
+    <button class="nav-item" data-view="backup" onclick="setView('backup')">💾 Import / Export</button>
+    <button class="nav-item" data-view="reminders" onclick="setView('reminders')">🔔 Reminders</button>
+  </aside>
+
+  <!-- Main View Area -->
+  <main id="app"></main>
+
+  <!-- Single-Back-Button Animated Form Guide Overlay -->
+  <div id="guideOverlay" class="overlay">
+    <div class="overlay-top">
+      <button class="back-btn" onclick="closeGuide()">← Back to Exercises</button>
+      <strong id="guideTitle" style="font-size:0.95rem;">Exercise Guide</strong>
+    </div>
+    <div class="overlay-body" id="guideBody"></div>
+  </div>
+
+  <!-- Sticky Bottom Timer Bar -->
+  <div class="timer-bar">
+    <div>
+      <div class="timer-meta" id="timerLabel">REST TIMER (60s)</div>
+      <div class="timer-clock" id="timerClock">01:00</div>
+    </div>
+    <div class="timer-actions">
+      <button class="t-btn" onclick="startTimer(20, '20s Hold', true)">20s</button>
+      <button class="t-btn" onclick="startTimer(30, '30s Hold', true)">30s</button>
+      <button class="t-btn" onclick="startTimer(45, '45s Hold', true)">45s</button>
+      <button class="t-btn" onclick="startTimer(60, '60s Rest', false)">60s</button>
+      <button class="t-btn stop" onclick="stopTimer()">Stop</button>
+    </div>
+  </div>
+
+  <script>
+    // --- PWA Service Worker Registration & Install Prompt ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installBanner').classList.add('show');
+    });
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installBanner').classList.remove('show');
+    });
+
+    // --- Workout Plan Data (Overhead Tricep Extensions on Day 1) ---
+    const WORKOUTS = [
+      {
+        id: 'day1',
+        tab: 'Day 1 (Mon)',
+        title: 'Day 1: Push, Squat & Deep Core',
+        exercises: [
+          {
+            id: 'd1_e1', name: 'Incline Push-Ups', unit: 'reps', target: '3 sets × 8–12 reps • Chest, Shoulders, Triceps',
+            how: 'Hands slightly wider than shoulders on a sturdy counter or couch edge. Lower chest slowly for 3 seconds, press back up.',
+            cues: ['Keep body in a straight line from head to heels.', 'Lower with a controlled 3-second tempo.', 'Drive through palms without flaring elbows past 45 degrees.'],
+            timers: [{ label: '3s Lowering Tempo', sec: 3 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'incline push ups proper form tutorial', anim: 'pushup'
+          },
+          {
+            id: 'd1_e2', name: 'Bodyweight Squats', unit: 'reps', target: '3 sets × 12–15 reps • Quads & Glutes',
+            how: 'Feet shoulder-width apart, sit hips back and down until thighs are parallel, chest up, drive through heels.',
+            cues: ['Keep heels planted flat on the floor.', 'Track knees in line with your toes.', 'Squeeze glutes gently at the top.'],
+            timers: [{ label: '45s Set Pacer', sec: 45 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'bodyweight squat proper form beginners', anim: 'squat'
+          },
+          {
+            id: 'd1_e3', name: 'Overhead Tricep Extensions', unit: 'reps', target: '3 sets × 12–15 reps • Back of Arms (Wrist-Friendly)',
+            how: 'Hold a filled water jug, heavy book, or loaded backpack overhead with both hands. Keep elbows tucked close to ears, lower behind head for 3 seconds, and extend straight up.',
+            cues: ['Keep wrists completely neutral—no bodyweight load on wrists.', 'Point elbows forward and keep upper arms still.', 'Lower slowly for 3 seconds to stretch the triceps, then press up.'],
+            timers: [{ label: '3s Lowering Tempo', sec: 3 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'two hand overhead tricep extension proper form', anim: 'tricep'
+          },
+          {
+            id: 'd1_e4', name: 'Dead Bugs', unit: 'reps', target: '3 sets × 10 reps/side • Deep Lower Belly',
+            how: 'Lie on your back, press lower back flat into floor. Slowly extend opposite arm and leg until hovering, return, switch.',
+            cues: ['Glue your lower back to the floor the entire time.', 'Exhale as you extend arm and leg.', 'Move slowly—do not let ribs flare.'],
+            timers: [{ label: '45s Set Pacer', sec: 45 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'dead bug exercise proper form core', anim: 'deadbug'
+          },
+          {
+            id: 'd1_e5', name: 'Forearm Plank', unit: 'sec', target: '3 sets × 30–45 sec • Core Endurance',
+            how: 'Elbows directly under shoulders, legs extended. Squeeze glutes and brace abs in a flat line without sagging hips.',
+            cues: ['Tuck tailbone slightly and brace your core.', 'Keep neck neutral looking between your hands.', 'Breathe steadily throughout the hold.'],
+            timers: [{ label: '30s Hold', sec: 30 }, { label: '35s Hold', sec: 35 }, { label: '45s Hold', sec: 45 }],
+            ytQuery: 'forearm plank proper form tutorial', anim: 'plank'
+          }
+        ]
+      },
+      {
+        id: 'day2',
+        tab: 'Day 2 (Wed)',
+        title: 'Day 2: Pull, Hinge & Obliques',
+        exercises: [
+          {
+            id: 'd2_e1', name: 'Doorframe or Towel Rows', unit: 'reps', target: '3 sets × 12–15 reps • Biceps & Upper Back',
+            how: 'Grip doorframe sides at chest height, walk feet forward to lean back, pull chest forward squeezing shoulder blades for 2s.',
+            cues: ['Keep body straight as you lean back.', 'Pull elbows back and squeeze shoulder blades together.', 'Lower slowly under control.'],
+            timers: [{ label: '2s Peak Squeeze', sec: 2 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'doorframe rows bodyweight back exercise form', anim: 'row'
+          },
+          {
+            id: 'd2_e2', name: 'Glute Bridges', unit: 'reps', target: '3 sets × 15 reps • Glutes & Hamstrings',
+            how: 'Lie on back with knees bent, feet flat. Drive through heels to lift hips, squeeze glutes hard for 2 seconds at top.',
+            cues: ['Push through heels, not toes.', 'Avoid hyperextending your lower back at the top.', 'Hold a strong 2-second glute squeeze each rep.'],
+            timers: [{ label: '2s Top Squeeze', sec: 2 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'glute bridge proper form tutorial', anim: 'bridge'
+          },
+          {
+            id: 'd2_e3', name: 'Reverse Lunges', unit: 'reps', target: '3 sets × 10 reps/leg • Thighs & Glutes',
+            how: 'Step one foot backward, lower back knee until both knees hit 90 degrees, drive through front heel to stand.',
+            cues: ['Keep torso upright and core braced.', 'Keep front knee stacked over front ankle.', 'Push squarely through the front heel.'],
+            timers: [{ label: '45s Set Pacer', sec: 45 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'reverse lunge proper form beginners', anim: 'lunge'
+          },
+          {
+            id: 'd2_e4', name: 'Side Planks', unit: 'sec', target: '3 sets × 20–30 sec/side • Obliques & Waist',
+            how: 'Elbow under shoulder, feet stacked or staggered. Lift hips into a straight diagonal line and hold.',
+            cues: ['Press forearm firmly into the mat to protect shoulder.', 'Keep hips stacked—do not roll forward.', 'Switch sides after each hold.'],
+            timers: [{ label: '20s Hold', sec: 20 }, { label: '25s Hold', sec: 25 }, { label: '30s Hold', sec: 30 }],
+            ytQuery: 'side plank proper form tutorial', anim: 'sideplank'
+          },
+          {
+            id: 'd2_e5', name: 'Bird-Dogs', unit: 'reps', target: '3 sets × 10 reps/side • Lower Back & Stability',
+            how: 'From hands and knees, reach opposite arm forward and leg straight back without twisting hips. Hold 2s, switch.',
+            cues: ['Keep hips level like balancing a cup on your lower back.', 'Reach long through heel and fingertips.', 'Hold full extension for 2 seconds.'],
+            timers: [{ label: '2s Extension Hold', sec: 2 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'bird dog exercise proper form', anim: 'birddog'
+          }
+        ]
+      },
+      {
+        id: 'day3',
+        tab: 'Day 3 (Fri)',
+        title: 'Day 3: Endurance & Core Stability',
+        exercises: [
+          {
+            id: 'd3_e1', name: 'Wall Sit', unit: 'sec', target: '3 sets × 30–45 sec • Quads & Legs',
+            how: 'Back flat against wall, slide down until thighs are parallel to floor (90-degree knees), weight in heels, hold.',
+            cues: ['Keep lower back pressed against the wall.', 'Do not rest hands on your thighs.', 'Keep weight evenly in both heels.'],
+            timers: [{ label: '30s Hold', sec: 30 }, { label: '35s Hold', sec: 35 }, { label: '45s Hold', sec: 45 }],
+            ytQuery: 'wall sit proper form exercise', anim: 'wallsit'
+          },
+          {
+            id: 'd3_e2', name: 'Push-Up to Shoulder Tap', unit: 'reps', target: '3 sets × 8–10 reps • Arms & Anti-Rotation Core',
+            how: 'Perform an incline or knee push-up. At the top, tap each opposite shoulder while keeping hips rock-steady.',
+            cues: ['Widen your feet slightly to stop hips from swaying.', 'Keep core braced tight during each shoulder tap.', 'Move slowly and deliberately.'],
+            timers: [{ label: '45s Set Pacer', sec: 45 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'push up to shoulder tap proper form', anim: 'pushup'
+          },
+          {
+            id: 'd3_e3', name: 'Calf Raises', unit: 'reps', target: '3 sets × 15–20 reps • Lower Legs',
+            how: 'Stand near a wall for light balance. Rise high onto the balls of your feet, pause 1s at top, lower slowly.',
+            cues: ['Press straight up through the big toe mound.', 'Pause for a full second at peak height.', 'Lower heels all the way down slowly.'],
+            timers: [{ label: '1s Top Pause', sec: 1 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'standing bodyweight calf raises proper form', anim: 'calf'
+          },
+          {
+            id: 'd3_e4', name: 'Lying Leg Raises', unit: 'reps', target: '3 sets × 10–12 reps • Lower Abs',
+            how: 'Lie on back, hands tucked under lower glutes. Raise legs, then lower slowly for 3s without arching lower back.',
+            cues: ['Press lower back firmly into the floor.', 'Bend knees slightly if lower back begins to lift.', 'Use a slow 3-second lowering phase.'],
+            timers: [{ label: '3s Lowering Tempo', sec: 3 }, { label: '60s Rest', sec: 60, isRest: true }],
+            ytQuery: 'lying leg raises proper form lower abs', anim: 'legraise'
+          },
+          {
+            id: 'd3_e5', name: 'Slow Mountain Climbers', unit: 'sec', target: '3 sets × 30–40 sec • Full Core & Cardio',
+            how: 'In a high plank, slowly drive one knee toward your chest, return, and switch while keeping hips level.',
+            cues: ['Keep shoulders stacked over wrists.', 'Avoid bouncing your hips up and down.', 'Exhale gently on each knee drive.'],
+            timers: [{ label: '30s Set', sec: 30 }, { label: '35s Set', sec: 35 }, { label: '40s Set', sec: 40 }],
+            ytQuery: 'slow mountain climbers proper form core', anim: 'climber'
+          }
+        ]
+      }
+    ];
+
+    // --- State Management ---
+    const STORAGE_KEY = 'recomp_pwa_state_v1';
+    function defaultState() {
+      return {
+        drafts: {}, // { exId: [{ val: '', done: false }, ...] }
+        history: [], // [{ id, dayIdx, title, date, ts, exercises: [{ id, name, unit, sets: [num] }] }]
+        notif: { enabled: true, days: [1, 3, 5], time: '10:00' },
+        lastBackup: null
+      };
+    }
+
+    let state = defaultState();
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) state = Object.assign(defaultState(), JSON.parse(saved));
+    } catch (e) {}
+
+    let currentView = 'workouts';
+    let currentDay = 0;
+    let chartExercise = 'all';
+    let chartMetric = 'volume';
+    let useSampleData = false;
+    let selectedPointIdx = null;
+    let timerInterval = null;
+    let timeLeft = 60;
+    let lastNotifFiredKey = '';
+
+    function saveState() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      updateWeeklyBadge();
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2600);
+    }
+
+    function getDraftSets(exId) {
+      if (!state.drafts[exId] || !state.drafts[exId].length) {
+        state.drafts[exId] = [{ val: '', done: false }, { val: '', done: false }, { val: '', done: false }];
+      }
+      return state.drafts[exId];
+    }
+
+    function updateWeeklyBadge() {
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const count = state.history.filter(h => h.ts >= weekAgo).length;
+      document.getElementById('weeklyBadge').textContent = `${count} / 3 Week`;
+    }
+
+    // --- Navigation & Android Back Button Support ---
+    function openDrawer() {
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('drawerBackdrop').classList.add('open');
+      history.pushState({ modal: 'drawer' }, '');
+    }
+    function closeDrawer(fromPop = false) {
+      document.getElementById('drawer').classList.remove('open');
+      document.getElementById('drawerBackdrop').classList.remove('open');
+      if (!fromPop && history.state && history.state.modal === 'drawer') history.back();
+    }
+    function setView(view) {
+      currentView = view;
+      closeDrawer(true);
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === view);
+      });
+      render();
+      window.scrollTo(0, 0);
+    }
+
+    function openGuide(dayIdx, exIdx) {
+      const ex = WORKOUTS[dayIdx].exercises[exIdx];
+      document.getElementById('guideTitle').textContent = ex.name;
+      const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.ytQuery)}`;
+      const intentUrl = `intent://www.youtube.com/results?search_query=${encodeURIComponent(ex.ytQuery)}#Intent;package=com.google.android.youtube;scheme=https;end`;
+
+      document.getElementById('guideBody').innerHTML = `
+        <div class="svg-stage">${getAnimatedSVG(ex.anim)}</div>
+        <div class="ex-target" style="font-size:0.84rem;">${ex.target}</div>
+        <p style="font-size:0.9rem;color:var(--muted);line-height:1.45;margin-bottom:12px;">${ex.how}</p>
+        <strong style="font-size:0.88rem;">Key Form Checkpoints</strong>
+        <ul class="cue-list">${ex.cues.map(c => `<li>${c}</li>`).join('')}</ul>
+        <div class="timer-chips">
+          ${ex.timers.map(t => `<button class="chip" onclick="startTimer(${t.sec}, '${ex.name}: ${t.label}', ${!t.isRest})">⏱ ${t.label}</button>`).join('')}
+        </div>
+        <div class="row-btns">
+          <a class="btn-accent" style="text-decoration:none;display:inline-block;" href="${intentUrl}">📺 Open in YouTube App</a>
+          <button class="btn-outline" onclick="copyText('${ytUrl}', 'YouTube link copied!')">📋 Copy Video Link</button>
+        </div>
+      `;
+      document.getElementById('guideOverlay').classList.add('open');
+      history.pushState({ modal: 'guide' }, '');
+    }
+
+    function closeGuide(fromPop = false) {
+      document.getElementById('guideOverlay').classList.remove('open');
+      if (!fromPop && history.state && history.state.modal === 'guide') history.back();
+    }
+
+    window.addEventListener('popstate', () => {
+      if (document.getElementById('guideOverlay').classList.contains('open')) {
+        closeGuide(true);
+      } else if (document.getElementById('drawer').classList.contains('open')) {
+        closeDrawer(true);
+      }
+    });
+
+    // --- Offline Animated SVG Form Demos ---
+    function getAnimatedSVG(type) {
+      const style = `
+        <style>
+          .limb { stroke:#38bdf8; stroke-width:6; stroke-linecap:round; fill:none; }
+          .hl { stroke:#22c55e; stroke-width:7; stroke-linecap:round; fill:none; }
+          .head { fill:#f8fafc; }
+          .floor { stroke:#334155; stroke-width:3; }
+          .bob { animation: bob 2.2s ease-in-out infinite; transform-origin: center; }
+          .pulse { animation: pulse 2s ease-in-out infinite; }
+          @keyframes bob { 0%,100%{ transform: translateY(0px); } 50%{ transform: translateY(14px); } }
+          @keyframes pulse { 0%,100%{ opacity: 0.45; } 50%{ opacity: 1; } }
+        </style>`;
+      if (type === 'tricep') {
+        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
+          <line class="floor" x1="20" y1="165" x2="200" y2="165"/>
+          <circle class="head" cx="110" cy="54" r="13"/>
+          <line class="limb" x1="110" y1="67" x2="110" y2="122"/>
+          <line class="limb" x1="110" y1="122" x2="96" y2="163"/>
+          <line class="limb" x1="110" y1="122" x2="124" y2="163"/>
+          <!-- Upper arms tucked vertical -->
+          <line class="hl" x1="110" y1="74" x2="96" y2="34"/>
+          <line class="hl" x1="110" y1="74" x2="124" y2="34"/>
+          <!-- Animated Forearms + Weight -->
+          <g class="bob">
+            <line class="limb" x1="96" y1="34" x2="110" y2="16"/>
+            <line class="limb" x1="124" y1="34" x2="110" y2="16"/>
+            <rect x="98" y="8" width="24" height="14" rx="4" fill="#f59e0b"/>
+          </g>
+          <text x="110" y="177" fill="#94a3b8" font-size="10" text-anchor="middle">Elbows Tucked • Neutral Wrists • 3s Lower</text>
+        </svg>`;
+      }
+      if (type === 'squat' || type === 'lunge' || type === 'wallsit') {
+        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
+          <line class="floor" x1="20" y1="162" x2="200" y2="162"/>
+          <g class="bob">
+            <circle class="head" cx="110" cy="40" r="13"/>
+            <line class="limb" x1="110" y1="53" x2="105" y2="102"/>
+            <line class="limb" x1="108" y1="65" x2="144" y2="74"/>
+            <line class="hl" x1="105" y1="102" x2="132" y2="124"/>
+            <line class="hl" x1="132" y1="124" x2="112" y2="160"/>
+          </g>
+          <text x="110" y="176" fill="#94a3b8" font-size="10" text-anchor="middle">Chest Up • Weight in Heels • Controlled Tempo</text>
+        </svg>`;
+      }
+      if (type === 'plank' || type === 'sideplank' || type === 'climber') {
+        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
+          <line class="floor" x1="16" y1="145" x2="204" y2="145"/>
+          <circle class="head" cx="54" cy="96" r="12"/>
+          <line class="hl pulse" x1="66" y1="102" x2="132" y2="112"/>
+          <line class="limb" x1="132" y1="112" x2="184" y2="142"/>
+          <line class="limb" x1="72" y1="104" x2="72" y2="142"/>
+          <line class="limb" x1="72" y1="142" x2="54" y2="142"/>
+          <text x="110" y="168" fill="#94a3b8" font-size="10" text-anchor="middle">Brace Core • Flat Back • Steady Breathing</text>
+        </svg>`;
+      }
+      return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
+        <line class="floor" x1="20" y1="152" x2="200" y2="152"/>
+        <g class="bob">
+          <circle class="head" cx="72" cy="84" r="12"/>
+          <line class="hl" x1="84" y1="90" x2="146" y2="116"/>
+          <line class="limb" x1="146" y1="116" x2="182" y2="148"/>
+          <line class="limb" x1="90" y1="94" x2="78" y2="148"/>
+        </g>
+        <text x="110" y="172" fill="#94a3b8" font-size="10" text-anchor="middle">Controlled Form • Full Range of Motion</text>
+      </svg>`;
+    }
+
+    // --- Timer Engine ---
+    function startTimer(sec, label = 'Timer', isHold = false) {
+      clearInterval(timerInterval);
+      timeLeft = sec;
+      const lbl = document.getElementById('timerLabel');
+      const clk = document.getElementById('timerClock');
+      lbl.textContent = label;
+      clk.classList.toggle('hold', isHold);
+      updateClock();
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        updateClock();
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          lbl.textContent = 'DONE!';
+          playBeep();
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timeLeft = 0;
+      document.getElementById('timerLabel').textContent = 'STOPPED';
+      updateClock();
+    }
+
+    function updateClock() {
+      const m = String(Math.floor(timeLeft / 60)).padStart(2, '0');
+      const s = String(timeLeft % 60).padStart(2, '0');
+      document.getElementById('timerClock').textContent = `${m}:${s}`;
+    }
+
+    function playBeep() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        osc.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => osc.stop(), 320);
+      } catch (e) {}
+    }
+
+    // --- Workout Interactions ---
+    function updateSetValue(exId, idx, val) {
+      const sets = getDraftSets(exId);
+      sets[idx].val = val;
+      saveState();
+    }
+
+    function toggleSetDone(dayIdx, exIdx, setIdx) {
+      const ex = WORKOUTS[dayIdx].exercises[exIdx];
+      const sets = getDraftSets(ex.id);
+      sets[setIdx].done = !sets[setIdx].done;
+      if (sets[setIdx].done) startTimer(60, `Rest • ${ex.name}`, false);
+      saveState();
+      render();
+    }
+
+    function addSet(exId) {
+      getDraftSets(exId).push({ val: '', done: false });
+      saveState();
+      render();
+    }
+
+    function removeSet(exId) {
+      const sets = getDraftSets(exId);
+      if (sets.length > 1) {
+        sets.pop();
+        saveState();
+        render();
+      }
+    }
+
+    function completeWorkout(dayIdx) {
+      const day = WORKOUTS[dayIdx];
+      const loggedExercises = day.exercises.map(ex => {
+        const sets = getDraftSets(ex.id);
+        const vals = sets
+          .filter(s => s.done || (s.val && Number(s.val) > 0))
+          .map(s => Number(s.val) || (ex.unit === 'sec' ? 30 : 10));
+        return { id: ex.id, name: ex.name, unit: ex.unit, sets: vals };
+      }).filter(e => e.sets.length > 0);
+
+      if (!loggedExercises.length) {
+        showToast('Log at least 1 set first!');
+        return;
+      }
+
+      const now = new Date();
+      state.history.unshift({
+        id: 'log_' + Date.now(),
+        dayIdx,
+        title: day.title,
+        date: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        ts: Date.now(),
+        exercises: loggedExercises
+      });
+
+      // Reset drafts for this day
+      day.exercises.forEach(ex => {
+        state.drafts[ex.id] = [{ val: '', done: false }, { val: '', done: false }, { val: '', done: false }];
+      });
+      saveState();
+      showToast('Workout logged!');
+      render();
+    }
+
+    // --- Sample Data Generator for Charts ---
+    function getSampleHistory() {
+      const now = Date.now();
+      const dayMs = 86400000;
+      return [
+        { id: 's1', dayIdx: 0, title: WORKOUTS[0].title, date: '3 wks ago', ts: now - 21 * dayMs, exercises: [{ id: 'd1_e1', name: 'Incline Push-Ups', unit: 'reps', sets: [8,8,8] }, { id: 'd1_e2', name: 'Bodyweight Squats', unit: 'reps', sets: [12,12,12] }, { id: 'd1_e3', name: 'Overhead Tricep Extensions', unit: 'reps', sets: [12,12,12] }, { id: 'd1_e5', name: 'Forearm Plank', unit: 'sec', sets: [30,30,30] }] },
+        { id: 's2', dayIdx: 0, title: WORKOUTS[0].title, date: '2 wks ago', ts: now - 14 * dayMs, exercises: [{ id: 'd1_e1', name: 'Incline Push-Ups', unit: 'reps', sets: [10,9,9] }, { id: 'd1_e2', name: 'Bodyweight Squats', unit: 'reps', sets: [14,13,13] }, { id: 'd1_e3', name: 'Overhead Tricep Extensions', unit: 'reps', sets: [13,13,12] }, { id: 'd1_e5', name: 'Forearm Plank', unit: 'sec', sets: [35,35,30] }] },
+        { id: 's3', dayIdx: 0, title: WORKOUTS[0].title, date: '1 wk ago', ts: now - 7 * dayMs, exercises: [{ id: 'd1_e1', name: 'Incline Push-Ups', unit: 'reps', sets: [11,10,10] }, { id: 'd1_e2', name: 'Bodyweight Squats', unit: 'reps', sets: [15,14,14] }, { id: 'd1_e3', name: 'Overhead Tricep Extensions', unit: 'reps', sets: [14,14,13] }, { id: 'd1_e5', name: 'Forearm Plank', unit: 'sec', sets: [40,40,35] }] },
+        { id: 's4', dayIdx: 0, title: WORKOUTS[0].title, date: 'Recent', ts: now - 2 * dayMs, exercises: [{ id: 'd1_e1', name: 'Incline Push-Ups', unit: 'reps', sets: [12,12,11] }, { id: 'd1_e2', name: 'Bodyweight Squats', unit: 'reps', sets: [15,15,15] }, { id: 'd1_e3', name: 'Overhead Tricep Extensions', unit: 'reps', sets: [15,15,14] }, { id: 'd1_e5', name: 'Forearm Plank', unit: 'sec', sets: [45,45,40] }] }
+      ];
+    }
+
+    // --- Render Views ---
+    function render() {
+      const app = document.getElementById('app');
+      if (currentView === 'workouts') renderWorkouts(app);
+      else if (currentView === 'charts') renderCharts(app);
+      else if (currentView === 'history') renderHistory(app);
+      else if (currentView === 'backup') renderBackup(app);
+      else if (currentView === 'reminders') renderReminders(app);
+    }
+
+    function renderWorkouts(app) {
+      const day = WORKOUTS[currentDay];
+      const tabsHtml = `<div class="day-tabs">${WORKOUTS.map((w, i) => `<button class="day-tab ${i === currentDay ? 'active' : ''}" onclick="currentDay=${i};render();">${w.tab}</button>`).join('')}</div>`;
+      const cardsHtml = day.exercises.map((ex, exIdx) => {
+        const sets = getDraftSets(ex.id);
+        const placeholder = ex.unit === 'sec' ? 'Seconds' : 'Reps';
+        return `<div class="card">
+          <div class="ex-top">
+            <div class="ex-title">${ex.name}</div>
+            <button class="guide-btn" onclick="openGuide(${currentDay}, ${exIdx})">▶ Form Guide</button>
+          </div>
+          <div class="ex-target">${ex.target}</div>
+          <div class="ex-note">${ex.how}</div>
+          <div class="timer-chips">
+            ${ex.timers.map(t => `<button class="chip" onclick="startTimer(${t.sec}, '${ex.name}: ${t.label}', ${!t.isRest})">⏱ ${t.label}</button>`).join('')}
+          </div>
+          ${sets.map((s, sIdx) => `
+            <div class="set-row">
+              <div class="set-label">Set ${sIdx + 1}</div>
+              <input class="set-input" type="number" inputmode="numeric" placeholder="${placeholder}" value="${s.val}" oninput="updateSetValue('${ex.id}', ${sIdx}, this.value)" />
+              <button class="set-done ${s.done ? 'done' : ''}" onclick="toggleSetDone(${currentDay}, ${exIdx}, ${sIdx})">${s.done ? '✓ Done' : 'Mark'}</button>
+            </div>
+          `).join('')}
+          <div class="set-controls">
+            <button class="small-btn" onclick="addSet('${ex.id}')">+ Add Set</button>
+            <button class="small-btn" onclick="removeSet('${ex.id}')">− Remove Set</button>
+          </div>
+        </div>`;
+      }).join('');
+      app.innerHTML = tabsHtml + cardsHtml + `<button class="primary-btn" onclick="completeWorkout(${currentDay})">Complete & Log ${day.tab}</button>`;
+    }
+
+    function renderCharts(app) {
+      const source = useSampleData ? getSampleHistory() : [...state.history].reverse();
+      const allEx = WORKOUTS.flatMap(w => w.exercises);
+      const points = [];
+      source.forEach(log => {
+        if (chartExercise === 'all') {
+          const totalSets = log.exercises.reduce((a, e) => a + e.sets.length, 0);
+          const totalVol = log.exercises.reduce((a, e) => a + e.sets.reduce((x, y) => x + y, 0), 0);
+          points.push({ date: log.date.split(' ')[0], val: chartMetric === 'sets' ? totalSets : totalVol, detail: `${log.title} • ${totalSets} sets, ${totalVol} total reps/sec` });
+        } else {
+          const found = log.exercises.find(e => e.id === chartExercise);
+          if (found) {
+            const vol = found.sets.reduce((a, b) => a + b, 0);
+            const best = Math.max(...found.sets);
+            const val = chartMetric === 'sets' ? found.sets.length : (chartMetric === 'best' ? best : vol);
+            points.push({ date: log.date.split(' ')[0], val, detail: `${log.date} • Sets: ${found.sets.join(', ')} (${found.unit})` });
+          }
+        }
+      });
+
+      const bestVal = points.length ? Math.max(...points.map(p => p.val)) : 0;
+      const avgVal = points.length ? Math.round(points.reduce((a, b) => a + b.val, 0) / points.length) : 0;
+      const trend = points.length >= 2 && points[0].val > 0 ? Math.round(((points[points.length - 1].val - points[0].val) / points[0].val) * 100) : 0;
+
+      let svgHtml = `<div style="text-align:center;padding:34px 10px;color:var(--muted);font-size:0.86rem;">Log at least 1 workout (or tap Preview Sample Data) to see your progress graph.</div>`;
+      if (points.length) {
+        const w = 320, h = 150, pad = 26;
+        const maxV = Math.max(...points.map(p => p.val), 1);
+        const coords = points.map((p, i) => {
+          const x = points.length === 1 ? w / 2 : pad + (i / (points.length - 1)) * (w - pad * 2);
+          const y = h - pad - (p.val / maxV) * (h - pad * 2);
+          return { x, y, ...p };
+        });
+        const poly = coords.map(c => `${c.x},${c.y}`).join(' ');
+        svgHtml = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="165">
+          <line x1="${pad}" y1="${h - pad}" x2="${w - pad}" y2="${h - pad}" stroke="#334155" stroke-width="1"/>
+          ${coords.length > 1 ? `<polyline fill="none" stroke="#38bdf8" stroke-width="3" points="${poly}" />` : ''}
+          ${coords.map((c, i) => `
+            <circle cx="${c.x}" cy="${c.y}" r="${selectedPointIdx === i ? 7 : 5}" fill="${selectedPointIdx === i ? '#22c55e' : '#38bdf8'}" style="cursor:pointer;" onclick="selectedPointIdx=${i};render();"/>
+            <text x="${c.x}" y="${c.y - 10}" fill="#f8fafc" font-size="10" text-anchor="middle">${c.val}</text>
+            <text x="${c.x}" y="${h - 8}" fill="#94a3b8" font-size="9" text-anchor="middle">${c.date}</text>
+          `).join('')}
+        </svg>`;
+      }
+
+      const activeDetail = selectedPointIdx !== null && points[selectedPointIdx]
+        ? `<div class="ex-note" style="margin-top:8px;"><strong>Selected:</strong> ${points[selectedPointIdx].detail}</div>` : '';
+
+      app.innerHTML = `
+        <div class="section-title">Progress Charts</div>
+        <select onchange="chartExercise=this.value;selectedPointIdx=null;render();">
+          <option value="all" ${chartExercise === 'all' ? 'selected' : ''}>All Workouts (Overall)</option>
+          ${allEx.map(e => `<option value="${e.id}" ${chartExercise === e.id ? 'selected' : ''}>${e.name}</option>`).join('')}
+        </select>
+        <div class="pill-row">
+          <button class="pill ${chartMetric === 'volume' ? 'active' : ''}" onclick="chartMetric='volume';render();">Total Reps / Sec</button>
+          <button class="pill ${chartMetric === 'sets' ? 'active' : ''}" onclick="chartMetric='sets';render();">Sets Completed</button>
+          ${chartExercise !== 'all' ? `<button class="pill ${chartMetric === 'best' ? 'active' : ''}" onclick="chartMetric='best';render();">Best Single Set</button>` : ''}
+        </div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="stat-val">${bestVal}</div><div class="stat-lbl">Best</div></div>
+          <div class="stat-box"><div class="stat-val">${avgVal}</div><div class="stat-lbl">Average</div></div>
+          <div class="stat-box"><div class="stat-val">${trend >= 0 ? '+' : ''}${trend}%</div><div class="stat-lbl">Trend</div></div>
+        </div>
+        <div class="chart-box">${svgHtml}${activeDetail}</div>
+        <button class="btn-outline" style="width:100%;" onclick="useSampleData=!useSampleData;selectedPointIdx=null;render();">
+          ${useSampleData ? 'Hide Sample Data' : '✨ Preview Sample Data'}
+        </button>
+      `;
+    }
+
+    function renderHistory(app) {
+      if (!state.history.length) {
+        app.innerHTML = `<div class="section-title">Workout History</div><div class="card"><p style="color:var(--muted);font-size:0.88rem;">No logged workouts yet. Complete a session on the Workouts tab to record it here.</p></div>`;
+        return;
+      }
+      app.innerHTML = `<div class="section-title">Workout History (${state.history.length})</div>` +
+        state.history.map((h, i) => `
+          <div class="hist-card">
+            <div class="hist-head" onclick="document.getElementById('hd_${i}').classList.toggle('open')">
+              <div>
+                <strong style="font-size:0.92rem;">${h.title}</strong>
+                <div style="font-size:0.76rem;color:var(--muted);">${h.date} • ${h.exercises.length} exercises</div>
+              </div>
+              <span style="color:var(--accent);font-size:0.8rem;">Details ▾</span>
+            </div>
+            <div id="hd_${i}" class="hist-detail">
+              ${h.exercises.map(e => `<div style="margin-bottom:5px;"><strong style="color:var(--text);">${e.name}:</strong> ${e.sets.join(' / ')} ${e.unit}</div>`).join('')}
+            </div>
+          </div>
+        `).join('');
+    }
+
+    function renderBackup(app) {
+      app.innerHTML = `
+        <div class="section-title">Import / Export Backup</div>
+        <div class="card">
+          <div style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">
+            Logged Sessions: <strong style="color:var(--text);">${state.history.length}</strong><br/>
+            Last Backup: <strong style="color:var(--text);">${state.lastBackup || 'Never'}</strong>
+          </div>
+          <div class="row-btns">
+            <button class="btn-accent" onclick="downloadBackup()">📥 Download Backup (.json)</button>
+            <button class="btn-outline" onclick="copyBackup()">📋 Copy Backup Code</button>
+          </div>
+        </div>
+        <div class="card">
+          <strong style="display:block;margin-bottom:8px;font-size:0.92rem;">Restore Backup</strong>
+          <input type="file" accept=".json,application/json" onchange="importFile(event)" style="margin-bottom:10px;font-size:0.82rem;" />
+          <textarea id="importBox" rows="4" placeholder="Or paste your backup JSON code here..."></textarea>
+          <div class="row-btns">
+            <button class="btn-accent" onclick="importFromText(true)">🔀 Merge with Existing</button>
+            <button class="btn-danger" onclick="importFromText(false)">♻️ Replace All</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function downloadBackup() {
+      state.lastBackup = new Date().toLocaleString();
+      saveState();
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `recomp-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      showToast('Backup downloaded!');
+      render();
+    }
+
+    function copyBackup() {
+      state.lastBackup = new Date().toLocaleString();
+      saveState();
+      copyText(JSON.stringify(state), 'Backup JSON copied!');
+      render();
+    }
+
+    function copyText(text, msg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast(msg)).catch(() => fallbackCopy(text, msg));
+      } else fallbackCopy(text, msg);
+    }
+    function fallbackCopy(text, msg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+      showToast(msg);
+    }
+
+    function importFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => { document.getElementById('importBox').value = reader.result; showToast('File loaded—choose Merge or Replace'); };
+      reader.readAsText(file);
+    }
+
+    function importFromText(merge) {
+      try {
+        const parsed = JSON.parse(document.getElementById('importBox').value.trim());
+        if (!Array.isArray(parsed.history)) throw new Error('Invalid format');
+        if (merge) {
+          const existingIds = new Set(state.history.map(h => h.id));
+          parsed.history.forEach(h => { if (!existingIds.has(h.id)) state.history.push(h); });
+          state.history.sort((a, b) => b.ts - a.ts);
+        } else {
+          state = Object.assign(defaultState(), parsed);
+        }
+        saveState();
+        showToast(merge ? 'History merged!' : 'Backup restored!');
+        render();
+      } catch (e) {
+        showToast('Invalid JSON backup code');
+      }
+    }
+
+    // --- Reminders & ICS Export ---
+    const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const ICS_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+    function renderReminders(app) {
+      app.innerHTML = `
+        <div class="section-title">Workout Reminders</div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <strong>Reminders Status</strong>
+            <button class="${state.notif.enabled ? 'btn-accent' : 'btn-outline'}" onclick="state.notif.enabled=!state.notif.enabled;saveState();render();">
+              ${state.notif.enabled ? 'Enabled ✓' : 'Paused'}
+            </button>
+          </div>
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Workout Days</label>
+          <div class="day-chip-grid">
+            ${DAY_NAMES.map((d, i) => `<button class="day-chip ${state.notif.days.includes(i) ? 'active' : ''}" onclick="toggleNotifDay(${i})">${d}</button>`).join('')}
+          </div>
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Reminder Time</label>
+          <input type="time" value="${state.notif.time}" onchange="state.notif.time=this.value;saveState();showToast('Time saved!');" />
+          <div class="row-btns">
+            <button class="btn-accent" onclick="testNotification()">🔔 Test Notification</button>
+            <button class="btn-outline" onclick="exportICS()">📥 Export Calendar Alarm (.ics)</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleNotifDay(dayIdx) {
+      const i = state.notif.days.indexOf(dayIdx);
+      if (i >= 0) state.notif.days.splice(i, 1);
+      else state.notif.days.push(dayIdx);
+      state.notif.days.sort();
+      saveState();
+      render();
+    }
+
+    function testNotification() {
+      playBeep();
+      showToast('Time for Your 3-Day Recomp Workout!');
+      if ('Notification' in window) {
+        Notification.requestPermission().then(perm => {
+          if (perm === 'granted') {
+            new Notification('3-Day Recomp Tracker', {
+              body: 'Time for your bodyweight workout session!',
+              icon: './icon-192.png'
+            });
+          }
+        });
+      }
+    }
+
+    function exportICS() {
+      const [hh, mm] = state.notif.time.split(':');
+      const byday = state.notif.days.map(d => ICS_DAYS[d]).join(',') || 'MO,WE,FR';
+      const now = new Date();
+      const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
+      const ics = [
+        'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RecompTracker//EN',
+        'BEGIN:VEVENT', `DTSTART:${y}${m}${d}T${hh}${mm}00`, 'DURATION:PT45M',
+        `RRULE:FREQ=WEEKLY;BYDAY=${byday}`,
+        'SUMMARY:3-Day Body Recomp Workout',
+        'DESCRIPTION:Open your Recomp Tracker PWA for today\'s bodyweight routine.',
+        'BEGIN:VALARM', 'TRIGGER:-PT0M', 'ACTION:DISPLAY', 'DESCRIPTION:Workout Time!', 'END:VALARM',
+        'END:VEVENT', 'END:VCALENDAR'
+      ].join('\r\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+      a.download = 'recomp-workout-reminders.ics';
+      a.click();
+      showToast('Calendar alarm (.ics) exported!');
+    }
+
+    setInterval(() => {
+      if (!state.notif.enabled) return;
+      const now = new Date();
+      const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const key = `${now.toDateString()}-${hhmm}`;
+      if (state.notif.days.includes(now.getDay()) && hhmm === state.notif.time && lastNotifFiredKey !== key) {
+        lastNotifFiredKey = key;
+        testNotification();
+      }
+    }, 20000);
+
+    updateWeeklyBadge();
+    render();
+  </script>
+</body>
+</html>
