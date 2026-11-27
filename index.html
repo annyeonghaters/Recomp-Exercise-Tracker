@@ -134,6 +134,29 @@
     .toast { position: fixed; top: 68px; left: 50%; transform: translateX(-50%); background: var(--success); color: #052e16; padding: 9px 16px; border-radius: 999px; font-weight: 800; font-size: 0.82rem; z-index: 95; display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
     .toast.show { display: block; }
   </style>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.oneSignalReady = false;
+    window.oneSignalOptedIn = false;
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "b0207ebd-45cc-4ca7-bd67-c2d0298abec9",
+        serviceWorkerPath: "Recomp-Exercise-Tracker/push/onesignal/OneSignalSDKWorker.js",
+        serviceWorkerParam: { scope: "/Recomp-Exercise-Tracker/push/onesignal/" },
+        notifyButton: { enable: false }
+      });
+      window.oneSignalReady = true;
+      window.oneSignalOptedIn = Boolean(OneSignal.User.PushSubscription.optedIn);
+      OneSignal.User.PushSubscription.addEventListener("change", (event) => {
+        window.oneSignalOptedIn = Boolean(event.current.optedIn);
+        if (typeof syncOneSignalSchedule === "function") syncOneSignalSchedule(false);
+        if (typeof currentView !== "undefined" && currentView === "reminders") render();
+      });
+      if (typeof syncOneSignalSchedule === "function") syncOneSignalSchedule(false);
+      if (typeof currentView !== "undefined" && currentView === "reminders") render();
+    });
+  </script>
 </head>
 <body>
   <div id="toast" class="toast"></div>
@@ -1384,28 +1407,117 @@
       }
     }
 
-    // --- Reminders & ICS Export ---
+    // --- Reminders, OneSignal Cloud Push Sync & ICS Export ---
     const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const ICS_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
+    function getPushSlot(timeStr) {
+      const parts = (timeStr || '10:00').split(':');
+      const hh = String(parts[0] || '10').padStart(2, '0');
+      const mm = Number(parts[1] || 0) < 30 ? '00' : '30';
+      return `${hh}:${mm}`;
+    }
+
+    function syncOneSignalSchedule(notifyUser = false) {
+      if (!window.OneSignalDeferred) return;
+      const slot = getPushSlot(state.notif.time);
+      const selectedDays = state.notif.days.slice(0, 5); // OneSignal Free plan supports up to 6 tags (1 slot + up to 5 days)
+      const tagsToAdd = {
+        remind_slot: state.notif.enabled ? slot : 'OFF'
+      };
+      const tagsToRemove = [];
+      for (let d = 0; d < 7; d++) {
+        if (selectedDays.includes(d)) tagsToAdd['d' + d] = '1';
+        else tagsToRemove.push('d' + d);
+      }
+
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          if (!OneSignal.User.PushSubscription.optedIn) return;
+          if (tagsToRemove.length) await OneSignal.User.removeTags(tagsToRemove);
+          await OneSignal.User.addTags(tagsToAdd);
+          if (notifyUser) showToast(`Push schedule synced (${state.notif.enabled ? slot : 'Paused'})`);
+        } catch (e) {}
+      });
+    }
+
+    function enableOneSignalPush() {
+      if (!window.OneSignalDeferred) {
+        showToast('Push SDK still loading...');
+        return;
+      }
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          await OneSignal.Notifications.requestPermission();
+          await OneSignal.User.PushSubscription.optIn();
+          window.oneSignalOptedIn = Boolean(OneSignal.User.PushSubscription.optedIn);
+          if (window.oneSignalOptedIn) {
+            syncOneSignalSchedule(false);
+            showToast('Push notifications enabled & synced!');
+          } else {
+            showToast('Please allow notifications in browser settings');
+          }
+          render();
+        } catch (e) {
+          showToast('Could not enable push notifications');
+        }
+      });
+    }
+
+    function toggleNotifEnabled() {
+      state.notif.enabled = !state.notif.enabled;
+      saveState();
+      syncOneSignalSchedule(true);
+      render();
+    }
+
+    function updateNotifTime(val) {
+      state.notif.time = val || '10:00';
+      saveState();
+      syncOneSignalSchedule(true);
+      render();
+    }
+
     function renderReminders(app) {
+      const slot = getPushSlot(state.notif.time);
+      const daysLabel = state.notif.days.length
+        ? state.notif.days.map(d => DAY_NAMES[d]).join(', ')
+        : 'None';
+      const pushStatusHtml = window.oneSignalOptedIn
+        ? `<span style="color:var(--success);font-weight:800;">Subscribed ✓</span>`
+        : `<button class="btn-accent" onclick="enableOneSignalPush()">Enable Push</button>`;
+
       app.innerHTML = `
         <div class="section-title">Workout Reminders</div>
         <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+            <div>
+              <strong>Background Push (OneSignal)</strong>
+              <div style="font-size:0.76rem;color:var(--muted);">Sends alerts even when the app is closed</div>
+            </div>
+            ${pushStatusHtml}
+          </div>
+          <div class="ex-note" style="margin-bottom:0;">
+            ${window.oneSignalOptedIn
+              ? `Synced schedule: <strong style="color:var(--text);">${state.notif.enabled ? `${daysLabel} at ${slot} ET` : 'Paused'}</strong> (checks at :00 &amp; :30)`
+              : 'Tap <strong>Enable Push</strong> once to subscribe this device and sync your schedule below.'}
+          </div>
+        </div>
+        <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
             <strong>Reminders Status</strong>
-            <button class="${state.notif.enabled ? 'btn-accent' : 'btn-outline'}" onclick="state.notif.enabled=!state.notif.enabled;saveState();render();">
+            <button class="${state.notif.enabled ? 'btn-accent' : 'btn-outline'}" onclick="toggleNotifEnabled()">
               ${state.notif.enabled ? 'Enabled ✓' : 'Paused'}
             </button>
           </div>
-          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Workout Days</label>
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Workout Days (up to 5 days for free cloud push)</label>
           <div class="day-chip-grid">
             ${DAY_NAMES.map((d, i) => `<button class="day-chip ${state.notif.days.includes(i) ? 'active' : ''}" onclick="toggleNotifDay(${i})">${d}</button>`).join('')}
           </div>
-          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Reminder Time</label>
-          <input type="time" value="${state.notif.time}" onchange="state.notif.time=this.value;saveState();showToast('Time saved!');" />
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Reminder Time (Eastern Time — snaps to :00 or :30 for cloud push)</label>
+          <input type="time" value="${state.notif.time}" onchange="updateNotifTime(this.value)" />
           <div class="row-btns">
-            <button class="btn-accent" onclick="testNotification()">🔔 Test Notification</button>
+            <button class="btn-accent" onclick="testNotification()">🔔 Test Local Alert</button>
             <button class="btn-outline" onclick="exportICS()">📥 Export Calendar Alarm (.ics)</button>
           </div>
         </div>
@@ -1414,10 +1526,18 @@
 
     function toggleNotifDay(dayIdx) {
       const i = state.notif.days.indexOf(dayIdx);
-      if (i >= 0) state.notif.days.splice(i, 1);
-      else state.notif.days.push(dayIdx);
+      if (i >= 0) {
+        state.notif.days.splice(i, 1);
+      } else {
+        if (state.notif.days.length >= 5) {
+          showToast('Max 5 days for free cloud push');
+          return;
+        }
+        state.notif.days.push(dayIdx);
+      }
       state.notif.days.sort();
       saveState();
+      syncOneSignalSchedule(true);
       render();
     }
 
