@@ -190,7 +190,7 @@
     <button class="nav-item" data-view="charts" onclick="setView('charts')">📈 Progress Charts</button>
     <button class="nav-item" data-view="history" onclick="setView('history')">📅 Workout History</button>
     <button class="nav-item" data-view="backup" onclick="setView('backup')">💾 Import / Export</button>
-    <button class="nav-item" data-view="reminders" onclick="setView('reminders')">🔔 Reminders</button>
+    <button class="nav-item" data-view="reminders" onclick="setView('reminders')">🔔 Push Notifications</button>
     <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);">
       <button class="nav-item" onclick="forceUpdatePWA()" style="margin-bottom:0;color:var(--accent);">🔄 Check for Updates</button>
     </div>
@@ -1552,45 +1552,49 @@
       try { hasLocalKey = Boolean(localStorage.getItem(OS_KEY_STORAGE)); } catch (e) {}
 
       app.innerHTML = `
-        <div class="section-title">Workout Reminders</div>
+        <div class="section-title">Push Notification Setup</div>
         <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
             <div>
-              <strong>Background Push (OneSignal)</strong>
-              <div style="font-size:0.76rem;color:var(--muted);">Sends alerts even when the app is closed</div>
+              <strong>Device Push Subscription</strong>
+              <div style="font-size:0.76rem;color:var(--muted);">OneSignal background alerts (works when app is closed)</div>
             </div>
             ${pushStatusHtml}
           </div>
-          <div class="ex-note" style="margin-bottom:10px;">
-            ${window.oneSignalOptedIn
-              ? `Synced schedule: <strong style="color:var(--text);">${state.notif.enabled ? `${daysLabel} at ${slot} ET` : 'Paused'}</strong> (checks at :00 &amp; :30)`
-              : 'Tap <strong>Enable Push</strong> once to subscribe this device and sync your schedule below.'}
-          </div>
-          <label style="font-size:0.76rem;color:var(--muted);display:block;margin-bottom:6px;">
-            OneSignal REST API Key (stored only on this phone for in-app testing${hasLocalKey ? ' • Saved ✓' : ''})
-          </label>
-          <input id="osApiKeyInput" type="password" placeholder="${hasLocalKey ? '•••••••••••••••• (Saved locally)' : 'Paste OneSignal REST API Key...'}" onchange="saveLocalApiKey(this.value)" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:10px;font-size:0.84rem;margin-bottom:8px;" />
-          <div class="row-btns" style="margin-top:4px;">
-            <button class="btn-accent" onclick="sendTestCloudPush()">🚀 Send Test Push</button>
-            <a class="btn-outline" style="text-decoration:none;display:inline-block;" target="_blank" rel="noopener" href="https://github.com/annyeonghaters/Recomp-Exercise-Tracker/actions/workflows/workout-push.yml">⚡ GitHub Action Test</a>
-          </div>
-        </div>
-        <div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <strong>Reminders Status</strong>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding-top:10px;border-top:1px solid var(--border);margin-bottom:10px;">
+            <div>
+              <strong>Schedule Status</strong>
+              <div style="font-size:0.76rem;color:var(--muted);">${state.notif.enabled ? `${daysLabel} at ${slot} ET` : 'All scheduled pushes paused'}</div>
+            </div>
             <button class="${state.notif.enabled ? 'btn-accent' : 'btn-outline'}" onclick="toggleNotifEnabled()">
-              ${state.notif.enabled ? 'Enabled ✓' : 'Paused'}
+              ${state.notif.enabled ? 'Active ✓' : 'Paused'}
             </button>
           </div>
+
           <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Workout Days (up to 5 days for free cloud push)</label>
           <div class="day-chip-grid">
             ${DAY_NAMES.map((d, i) => `<button class="day-chip ${state.notif.days.includes(i) ? 'active' : ''}" onclick="toggleNotifDay(${i})">${d}</button>`).join('')}
           </div>
-          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Reminder Time (Eastern Time — snaps to :00 or :30 for cloud push)</label>
+
+          <label style="font-size:0.8rem;color:var(--muted);display:block;margin-bottom:6px;">Notification Time (Eastern Time — snaps to :00 or :30)</label>
           <input type="time" value="${state.notif.time}" onchange="updateNotifTime(this.value)" />
-          <div class="row-btns">
-            <button class="btn-accent" onclick="testNotification()">🔔 Test Local Alert</button>
-            <button class="btn-outline" onclick="exportICS()">📥 Export Calendar Alarm (.ics)</button>
+
+          <div class="ex-note" style="margin-bottom:12px;">
+            ${window.oneSignalOptedIn
+              ? `Synced to OneSignal: <strong style="color:var(--text);">${state.notif.enabled ? `${daysLabel} at ${slot} ET` : 'Paused'}</strong> (GitHub Actions checks at :00 &amp; :30)`
+              : 'Tap <strong>Enable Push</strong> above to subscribe this device and sync your schedule.'}
+          </div>
+
+          <label style="font-size:0.76rem;color:var(--muted);display:block;margin-bottom:6px;">
+            OneSignal App API Key (saved only on this device for manual test pushes${hasLocalKey ? ' • Saved ✓' : ''})
+          </label>
+          <input id="osApiKeyInput" type="password" placeholder="${hasLocalKey ? '•••••••••••••••• (Saved on this device)' : 'Paste OneSignal os_v2_app_ key...'}" onchange="saveLocalApiKey(this.value)" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:10px;font-size:0.84rem;margin-bottom:10px;" />
+
+          <div class="row-btns" style="margin-top:0;">
+            <button class="btn-accent" onclick="sendTestCloudPush()">🚀 Send Test Push</button>
+            <a class="btn-outline" style="text-decoration:none;display:inline-block;" target="_blank" rel="noopener" href="https://github.com/annyeonghaters/Recomp-Exercise-Tracker/actions/workflows/workout-push.yml">⚡ GitHub Action</a>
+            <button class="btn-outline" onclick="exportICS()">📥 Calendar (.ics)</button>
           </div>
         </div>
       `;
