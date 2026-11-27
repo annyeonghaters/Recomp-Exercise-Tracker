@@ -1478,6 +1478,68 @@
       render();
     }
 
+    const OS_KEY_STORAGE = 'recomp_os_api_key_local';
+
+    function saveLocalApiKey(val) {
+      const trimmed = (val || '').trim();
+      try {
+        if (trimmed) localStorage.setItem(OS_KEY_STORAGE, trimmed);
+        else localStorage.removeItem(OS_KEY_STORAGE);
+      } catch (e) {}
+      showToast(trimmed ? 'API key saved locally on this device' : 'Local API key cleared');
+      render();
+    }
+
+    async function sendTestCloudPush() {
+      if (!window.OneSignalDeferred) {
+        showToast('Push SDK still loading...');
+        return;
+      }
+      let apiKey = '';
+      try { apiKey = localStorage.getItem(OS_KEY_STORAGE) || ''; } catch (e) {}
+      if (!apiKey) {
+        showToast('Paste your OneSignal REST API Key below first');
+        const inp = document.getElementById('osApiKeyInput');
+        if (inp) inp.focus();
+        return;
+      }
+
+      showToast('Sending test push...');
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          const optedIn = Boolean(OneSignal.User.PushSubscription.optedIn);
+          const subId = OneSignal.User.PushSubscription.id;
+          if (!optedIn || !subId) {
+            showToast('Tap Enable Push first to subscribe this device');
+            return;
+          }
+          const resp = await fetch('https://api.onesignal.com/notifications?c=push', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Key ' + apiKey
+            },
+            body: JSON.stringify({
+              app_id: 'b0207ebd-45cc-4ca7-bd67-c2d0298abec9',
+              include_subscription_ids: [subId],
+              headings: { en: '3-Day Recomp Tracker (Test)' },
+              contents: { en: 'Push notifications are working! Tap to open your tracker.' },
+              url: 'https://annyeonghaters.github.io/Recomp-Exercise-Tracker/'
+            })
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (resp.ok && !data.errors) {
+            showToast('Test push sent! Check your notifications.');
+          } else {
+            const errMsg = Array.isArray(data.errors) ? data.errors[0] : (data.errors || 'Check your API key');
+            showToast('Push failed: ' + errMsg);
+          }
+        } catch (e) {
+          showToast('Network error sending push');
+        }
+      });
+    }
+
     function renderReminders(app) {
       const slot = getPushSlot(state.notif.time);
       const daysLabel = state.notif.days.length
@@ -1486,6 +1548,8 @@
       const pushStatusHtml = window.oneSignalOptedIn
         ? `<span style="color:var(--success);font-weight:800;">Subscribed ✓</span>`
         : `<button class="btn-accent" onclick="enableOneSignalPush()">Enable Push</button>`;
+      let hasLocalKey = false;
+      try { hasLocalKey = Boolean(localStorage.getItem(OS_KEY_STORAGE)); } catch (e) {}
 
       app.innerHTML = `
         <div class="section-title">Workout Reminders</div>
@@ -1497,10 +1561,18 @@
             </div>
             ${pushStatusHtml}
           </div>
-          <div class="ex-note" style="margin-bottom:0;">
+          <div class="ex-note" style="margin-bottom:10px;">
             ${window.oneSignalOptedIn
               ? `Synced schedule: <strong style="color:var(--text);">${state.notif.enabled ? `${daysLabel} at ${slot} ET` : 'Paused'}</strong> (checks at :00 &amp; :30)`
               : 'Tap <strong>Enable Push</strong> once to subscribe this device and sync your schedule below.'}
+          </div>
+          <label style="font-size:0.76rem;color:var(--muted);display:block;margin-bottom:6px;">
+            OneSignal REST API Key (stored only on this phone for in-app testing${hasLocalKey ? ' • Saved ✓' : ''})
+          </label>
+          <input id="osApiKeyInput" type="password" placeholder="${hasLocalKey ? '•••••••••••••••• (Saved locally)' : 'Paste OneSignal REST API Key...'}" onchange="saveLocalApiKey(this.value)" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:9px 10px;border-radius:10px;font-size:0.84rem;margin-bottom:8px;" />
+          <div class="row-btns" style="margin-top:4px;">
+            <button class="btn-accent" onclick="sendTestCloudPush()">🚀 Send Test Push</button>
+            <a class="btn-outline" style="text-decoration:none;display:inline-block;" target="_blank" rel="noopener" href="https://github.com/annyeonghaters/Recomp-Exercise-Tracker/actions/workflows/workout-push.yml">⚡ GitHub Action Test</a>
           </div>
         </div>
         <div class="card">
