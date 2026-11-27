@@ -102,7 +102,13 @@
     .overlay-top { position: sticky; top: 0; background: rgba(15, 23, 42, 0.96); border-bottom: 1px solid var(--border); padding: 12px 14px; display: flex; align-items: center; gap: 12px; z-index: 10; }
     .back-btn { background: var(--accent); color: #0f172a; border: none; padding: 8px 14px; border-radius: 10px; font-weight: 800; font-size: 0.85rem; cursor: pointer; }
     .overlay-body { padding: 16px 14px 40px; }
-    .svg-stage { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 12px; display: flex; justify-content: center; align-items: center; margin-bottom: 14px; min-height: 210px; }
+    .svg-stage { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 10px 10px 12px; display: flex; flex-direction: column; align-items: center; margin-bottom: 14px; }
+    .anim-hud { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; padding: 0 4px; }
+    .phase-pill { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #22c55e; background: rgba(34, 197, 94, 0.14); border: 1px solid rgba(34, 197, 94, 0.4); padding: 4px 9px; border-radius: 999px; }
+    .anim-controls { display: flex; gap: 6px; }
+    .anim-ctrl-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 9px; border-radius: 7px; font-size: 0.72rem; font-weight: 700; cursor: pointer; }
+    .anim-progress-track { width: 100%; height: 4px; background: #1e293b; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+    .anim-progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #38bdf8, #22c55e); border-radius: 999px; }
     .cue-list { list-style: none; margin: 10px 0 16px; }
     .cue-list li { padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--accent); border-radius: 6px; margin-bottom: 8px; font-size: 0.86rem; line-height: 1.4; }
     .row-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
@@ -444,14 +450,38 @@
       window.scrollTo(0, 0);
     }
 
+    // --- 60fps Multi-Joint Skeletal Form Animator ---
+    let animRafId = null;
+    let animStartTs = null;
+    let animPaused = false;
+    let animPauseElapsed = 0;
+    let animSpeed = 1.0;
+    let activeAnimExId = null;
+
     function openGuide(dayIdx, exIdx) {
       const ex = WORKOUTS[dayIdx].exercises[exIdx];
+      activeAnimExId = ex.id;
+      animPaused = false;
+      animPauseElapsed = 0;
+      animSpeed = 1.0;
+      animStartTs = null;
+
       document.getElementById('guideTitle').textContent = ex.name;
       const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.ytQuery)}`;
       const intentUrl = `intent://www.youtube.com/results?search_query=${encodeURIComponent(ex.ytQuery)}#Intent;package=com.google.android.youtube;scheme=https;end`;
 
       document.getElementById('guideBody').innerHTML = `
-        <div class="svg-stage">${getAnimatedSVG(ex.anim)}</div>
+        <div class="svg-stage">
+          <div class="anim-hud">
+            <span id="animPhaseLabel" class="phase-pill">READY</span>
+            <div class="anim-controls">
+              <button id="animPlayBtn" class="anim-ctrl-btn" onclick="toggleAnimPlay()">⏸ Pause</button>
+              <button id="animSpeedBtn" class="anim-ctrl-btn" onclick="toggleAnimSpeed()">1.0x</button>
+            </div>
+          </div>
+          <svg id="formAnimSvg" viewBox="0 0 280 210" width="100%" style="max-width:300px;height:auto;display:block;"></svg>
+          <div class="anim-progress-track"><div id="animProgressFill" class="anim-progress-fill"></div></div>
+        </div>
         <div class="ex-target" style="font-size:0.84rem;">${ex.target}</div>
         <p style="font-size:0.9rem;color:var(--muted);line-height:1.45;margin-bottom:12px;">${ex.how}</p>
         <strong style="font-size:0.88rem;">Key Form Checkpoints</strong>
@@ -466,11 +496,65 @@
       `;
       document.getElementById('guideOverlay').classList.add('open');
       history.pushState({ modal: 'guide' }, '');
+      startFormAnimation();
     }
 
     function closeGuide(fromPop = false) {
+      stopFormAnimation();
       document.getElementById('guideOverlay').classList.remove('open');
       if (!fromPop && history.state && history.state.modal === 'guide') history.back();
+    }
+
+    function toggleAnimPlay() {
+      animPaused = !animPaused;
+      const btn = document.getElementById('animPlayBtn');
+      if (btn) btn.textContent = animPaused ? '▶ Play' : '⏸ Pause';
+      if (!animPaused) {
+        animStartTs = performance.now() - animPauseElapsed;
+        animRafId = requestAnimationFrame(tickFormAnimation);
+      } else if (animRafId) {
+        cancelAnimationFrame(animRafId);
+        animRafId = null;
+      }
+    }
+
+    function toggleAnimSpeed() {
+      animSpeed = animSpeed === 1.0 ? 0.5 : (animSpeed === 0.5 ? 1.5 : 1.0);
+      const btn = document.getElementById('animSpeedBtn');
+      if (btn) btn.textContent = animSpeed.toFixed(1) + 'x';
+    }
+
+    function startFormAnimation() {
+      stopFormAnimation();
+      animStartTs = performance.now();
+      animRafId = requestAnimationFrame(tickFormAnimation);
+    }
+
+    function stopFormAnimation() {
+      if (animRafId) {
+        cancelAnimationFrame(animRafId);
+        animRafId = null;
+      }
+    }
+
+    function tickFormAnimation(now) {
+      if (animPaused || !activeAnimExId) return;
+      const svg = document.getElementById('formAnimSvg');
+      if (!svg) return;
+
+      const cycleMs = 4200 / animSpeed;
+      animPauseElapsed = now - animStartTs;
+      const p = ((animPauseElapsed % cycleMs) / cycleMs);
+
+      const frame = getExerciseFrame(activeAnimExId, p);
+      svg.innerHTML = frame.svg;
+
+      const phaseEl = document.getElementById('animPhaseLabel');
+      if (phaseEl) phaseEl.textContent = frame.phase;
+      const progEl = document.getElementById('animProgressFill');
+      if (progEl) progEl.style.width = `${(p * 100).toFixed(1)}%`;
+
+      animRafId = requestAnimationFrame(tickFormAnimation);
     }
 
     window.addEventListener('popstate', () => {
@@ -481,198 +565,480 @@
       }
     });
 
-    // --- Offline Animated SVG Form Demos (All 15 Exercises) ---
-    function getAnimatedSVG(type) {
-      const base = `
-        <line x1="16" y1="158" x2="204" y2="158" stroke="#334155" stroke-width="3" stroke-linecap="round"/>
+    // Math & skeletal drawing helpers
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function ease(t) { return 0.5 - 0.5 * Math.cos(Math.max(0, Math.min(1, t)) * Math.PI); }
+    function pt(x, y) { return { x, y }; }
+    function lerpPt(a, b, t) { return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t) }; }
+
+    function seg(a, b, color = '#38bdf8', width = 6.5, opacity = 1) {
+      return `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${color}" stroke-width="${width}" stroke-linecap="round" opacity="${opacity}"/>`;
+    }
+    function joint(p, r = 3.5, color = '#e2e8f0', opacity = 1) {
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${color}" opacity="${opacity}"/>`;
+    }
+    function headCircle(p, r = 11.5) {
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="#f8fafc" stroke="#38bdf8" stroke-width="2"/>`;
+    }
+    function glowHalo(p, r, intensity = 0.5) {
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="#22c55e" opacity="${(0.16 + 0.34 * intensity).toFixed(2)}"/>`;
+    }
+    function floorMat(y = 180) {
+      return `
+        <line x1="14" y1="${y}" x2="266" y2="${y}" stroke="#334155" stroke-width="3" stroke-linecap="round"/>
+        <rect x="34" y="${y - 4}" width="212" height="5" rx="2.5" fill="#1e293b" stroke="#475569" stroke-width="1"/>
       `;
-      const s = 'stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-      const hl = 'stroke="#22c55e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-      const head = 'fill="#f8fafc"';
-      const prop = 'fill="#334155" stroke="#475569" stroke-width="2"';
+    }
 
-      const svgs = {
-        pushup: `
-          ${base}
-          <rect x="148" y="102" width="46" height="56" rx="4" ${prop}/>
-          <g>
-            <animateTransform attributeName="transform" type="rotate" values="0 46 152; 16 46 152; 0 46 152" dur="2.6s" repeatCount="indefinite"/>
-            <line x1="46" y1="152" x2="132" y2="96" ${s}/>
-            <circle cx="144" cy="86" r="11" ${head}/>
-            <line x1="126" y1="100" x2="154" y2="104" ${hl}/>
-          </g>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Incline Push-Up • 3s Lower • Straight Line</text>
-        `,
-        squat: `
-          ${base}
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0; 0 26; 0 0" dur="2.4s" repeatCount="indefinite"/>
-            <circle cx="110" cy="40" r="11" ${head}/>
-            <line x1="110" y1="51" x2="104" y2="96" ${s}/>
-            <line x1="108" y1="62" x2="146" y2="66" ${s}/>
-          </g>
-          <polyline ${hl}>
-            <animate attributeName="points" values="104,96 112,126 110,156; 104,122 134,126 110,156; 104,96 112,126 110,156" dur="2.4s" repeatCount="indefinite"/>
-          </polyline>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Bodyweight Squat • Hips Back • Heels Flat</text>
-        `,
-        tricep: `
-          ${base}
-          <circle cx="110" cy="54" r="11" ${head}/>
-          <line x1="110" y1="65" x2="110" y2="116" ${s}/>
-          <line x1="110" y1="116" x2="96" y2="156" ${s}/>
-          <line x1="110" y1="116" x2="124" y2="156" ${s}/>
-          <line x1="110" y1="74" x2="98" y2="34" ${hl}/>
-          <line x1="110" y1="74" x2="122" y2="34" ${hl}/>
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0; 0 22; 0 0" dur="2.6s" repeatCount="indefinite"/>
-            <line x1="98" y1="34" x2="110" y2="16" ${s}/>
-            <line x1="122" y1="34" x2="110" y2="16" ${s}/>
-            <rect x="98" y="8" width="24" height="12" rx="4" fill="#f59e0b"/>
-          </g>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Overhead Tricep Ext • Elbows Tucked • Neutral Wrists</text>
-        `,
-        deadbug: `
-          ${base}
-          <circle cx="52" cy="142" r="10" ${head}/>
-          <line x1="62" y1="146" x2="132" y2="146" ${hl}/>
-          <!-- Opposite arm & leg extending -->
-          <line x1="78" y1="146" ${s}>
-            <animate attributeName="x2" values="78; 34; 78" dur="2.8s" repeatCount="indefinite"/>
-            <animate attributeName="y2" values="104; 138; 104" dur="2.8s" repeatCount="indefinite"/>
-          </line>
-          <polyline ${s}>
-            <animate attributeName="points" values="132,146 132,110 162,110; 132,146 164,140 192,140; 132,146 132,110 162,110" dur="2.8s" repeatCount="indefinite"/>
-          </polyline>
-          <!-- Static opposite arm/leg -->
-          <line x1="84" y1="146" x2="84" y2="108" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
-          <polyline points="126,146 126,114 152,114" stroke="#64748b" stroke-width="5" stroke-linecap="round" fill="none"/>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Dead Bug • Lower Back Flat • Opposite Arm & Leg</text>
-        `,
-        plank: `
-          ${base}
-          <circle cx="52" cy="106" r="10" ${head}/>
-          <line x1="62" y1="112" x2="134" y2="120" ${hl}>
-            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
-          </line>
-          <line x1="134" y1="120" x2="184" y2="154" ${s}/>
-          <polyline points="72,114 72,154 54,154" ${s}/>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Forearm Plank • Brace Abs • Hold Steady</text>
-        `,
-        row: `
-          ${base}
-          <rect x="164" y="24" width="12" height="134" rx="2" ${prop}/>
-          <g>
-            <animateTransform attributeName="transform" type="rotate" values="-22 146 154; -6 146 154; -22 146 154" dur="2.4s" repeatCount="indefinite"/>
-            <line x1="146" y1="154" x2="112" y2="74" ${s}/>
-            <circle cx="106" cy="58" r="11" ${head}/>
-            <line x1="116" y1="84" x2="164" y2="84" ${hl}/>
-          </g>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Doorframe Row • Squeeze Shoulder Blades 2s</text>
-        `,
-        bridge: `
-          ${base}
-          <circle cx="48" cy="144" r="10" ${head}/>
-          <line x1="58" y1="148" x2="122" y2="148" ${hl}>
-            <animate attributeName="y2" values="148; 110; 148" dur="2.6s" repeatCount="indefinite"/>
-          </line>
-          <polyline ${s}>
-            <animate attributeName="points" values="122,148 156,112 168,156; 122,110 156,112 168,156; 122,148 156,112 168,156" dur="2.6s" repeatCount="indefinite"/>
-          </polyline>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Glute Bridge • Drive Through Heels • 2s Squeeze</text>
-        `,
-        lunge: `
-          ${base}
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0; 0 22; 0 0" dur="2.4s" repeatCount="indefinite"/>
-            <circle cx="110" cy="40" r="11" ${head}/>
-            <line x1="110" y1="51" x2="110" y2="96" ${s}/>
-          </g>
-          <!-- Front leg -->
-          <polyline ${hl}>
-            <animate attributeName="points" values="110,96 122,126 132,156; 110,118 136,120 136,156; 110,96 122,126 132,156" dur="2.4s" repeatCount="indefinite"/>
-          </polyline>
-          <!-- Back leg stepping back -->
-          <polyline ${s}>
-            <animate attributeName="points" values="110,96 98,126 92,156; 110,118 82,152 60,154; 110,96 98,126 92,156" dur="2.4s" repeatCount="indefinite"/>
-          </polyline>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Reverse Lunge • 90° Knees • Push Front Heel</text>
-        `,
-        sideplank: `
-          ${base}
-          <circle cx="58" cy="86" r="10" ${head}/>
-          <line x1="68" y1="94" x2="178" y2="152" ${hl}>
-            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
-          </line>
-          <polyline points="74,98 74,154 58,154" ${s}/>
-          <line x1="94" y1="108" x2="94" y2="70" ${s}/>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Side Plank • Hips Lifted • Straight Diagonal</text>
-        `,
-        birddog: `
-          ${base}
-          <circle cx="72" cy="96" r="10" ${head}/>
-          <line x1="82" y1="104" x2="140" y2="104" ${hl}/>
-          <!-- Supporting arm & leg -->
-          <line x1="88" y1="104" x2="88" y2="154" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
-          <polyline points="136,104 136,154 156,154" stroke="#64748b" stroke-width="5" stroke-linecap="round" fill="none"/>
-          <!-- Extending opposite arm & leg -->
-          <line x1="84" y1="104" ${s}>
-            <animate attributeName="x2" values="84; 34; 84" dur="2.8s" repeatCount="indefinite"/>
-            <animate attributeName="y2" values="148; 100; 148" dur="2.8s" repeatCount="indefinite"/>
-          </line>
-          <line x1="140" y1="104" ${s}>
-            <animate attributeName="x2" values="140; 194; 140" dur="2.8s" repeatCount="indefinite"/>
-            <animate attributeName="y2" values="150; 100; 150" dur="2.8s" repeatCount="indefinite"/>
-          </line>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Bird-Dog • Level Hips • 2s Extension Hold</text>
-        `,
-        wallsit: `
-          ${base}
-          <rect x="64" y="24" width="12" height="134" rx="2" ${prop}/>
-          <circle cx="88" cy="56" r="11" ${head}/>
-          <line x1="84" y1="67" x2="84" y2="112" ${s}/>
-          <polyline points="84,112 132,112 132,156" ${hl}>
-            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
-          </polyline>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Wall Sit • 90° Knees • Hold Isometric</text>
-        `,
-        calf: `
-          ${base}
-          <g>
-            <animateTransform attributeName="transform" type="translate" values="0 0; 0 -14; 0 0" dur="2s" repeatCount="indefinite"/>
-            <circle cx="110" cy="40" r="11" ${head}/>
-            <line x1="110" y1="51" x2="110" y2="104" ${s}/>
-            <line x1="110" y1="104" x2="104" y2="152" ${hl}/>
-            <line x1="110" y1="104" x2="116" y2="152" ${hl}/>
-          </g>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Calf Raises • Rise High • 1s Top Pause</text>
-        `,
-        legraise: `
-          ${base}
-          <circle cx="48" cy="144" r="10" ${head}/>
-          <line x1="58" y1="148" x2="122" y2="148" ${hl}/>
-          <line x1="122" y1="148" ${s}>
-            <animate attributeName="x2" values="188; 124; 188" dur="2.8s" repeatCount="indefinite"/>
-            <animate attributeName="y2" values="140; 82; 140" dur="2.8s" repeatCount="indefinite"/>
-          </line>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Lying Leg Raises • Lower Back Pressed Flat</text>
-        `,
-        climber: `
-          ${base}
-          <circle cx="52" cy="90" r="10" ${head}/>
-          <line x1="62" y1="98" x2="132" y2="116" ${hl}/>
-          <line x1="72" y1="100" x2="72" y2="154" ${s}/>
-          <!-- Driving knee -->
-          <polyline ${s}>
-            <animate attributeName="points" values="132,116 158,136 184,154; 132,116 102,130 120,148; 132,116 158,136 184,154" dur="1.8s" repeatCount="indefinite"/>
-          </polyline>
-          <line x1="132" y1="116" x2="180" y2="154" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
-          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Slow Mountain Climbers • Keep Hips Level</text>
-        `
-      };
+    function drawSkeleton(pose, opts = {}) {
+      const farC = '#1d4ed8';
+      const nearC = '#38bdf8';
+      const torsoC = opts.torsoGlow ? '#22c55e' : '#7dd3fc';
+      let out = '';
 
-      const body = svgs[type] || svgs.pushup;
-      return `<svg viewBox="0 0 220 182" width="220" height="182" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+      // Muscle highlight halos
+      if (opts.glows) {
+        opts.glows.forEach(g => { out += glowHalo(g.p, g.r, g.i); });
+      }
+
+      // Far limbs (behind torso)
+      if (pose.hip && pose.kneeF && pose.ankleF) {
+        out += seg(pose.hip, pose.kneeF, opts.legFGlow ? '#16a34a' : farC, 6, 0.85);
+        out += seg(pose.kneeF, pose.ankleF, opts.calfGlow ? '#16a34a' : farC, 5.5, 0.85);
+        if (pose.footF) out += seg(pose.ankleF, pose.footF, farC, 4.5, 0.85);
+      }
+      if (pose.shoulder && pose.elbowF && pose.wristF) {
+        out += seg(pose.shoulder, pose.elbowF, opts.armFGlow ? '#16a34a' : farC, 5.5, 0.85);
+        out += seg(pose.elbowF, pose.wristF, farC, 5, 0.85);
+      }
+
+      // Torso & Neck
+      if (pose.hip && pose.shoulder) {
+        out += seg(pose.hip, pose.shoulder, torsoC, 9.5, 1);
+      }
+      if (pose.shoulder && pose.head) {
+        out += seg(pose.shoulder, pose.head, '#cbd5e1', 5, 1);
+        out += headCircle(pose.head, opts.headR || 11.5);
+      }
+
+      // Near limbs (in front of torso)
+      if (pose.hip && pose.kneeN && pose.ankleN) {
+        out += seg(pose.hip, pose.kneeN, opts.legNGlow ? '#22c55e' : nearC, 7, 1);
+        out += seg(pose.kneeN, pose.ankleN, opts.calfGlow ? '#22c55e' : nearC, 6.2, 1);
+        if (pose.footN) out += seg(pose.ankleN, pose.footN, '#e2e8f0', 4.8, 1);
+        out += joint(pose.kneeN, 3.6);
+        out += joint(pose.ankleN, 3.0);
+      }
+      if (pose.shoulder && pose.elbowN && pose.wristN) {
+        out += seg(pose.shoulder, pose.elbowN, opts.armNGlow ? '#22c55e' : nearC, 6.2, 1);
+        out += seg(pose.elbowN, pose.wristN, opts.forearmNGlow ? '#22c55e' : nearC, 5.5, 1);
+        out += joint(pose.elbowN, 3.3);
+        out += joint(pose.wristN, 3.0, '#f8fafc');
+      }
+
+      if (pose.hip) out += joint(pose.hip, 4.2, '#f8fafc');
+      if (pose.shoulder) out += joint(pose.shoulder, 4.2, '#f8fafc');
+      return out;
+    }
+
+    function getExerciseFrame(exId, p) {
+      let svg = '';
+      let phase = '';
+
+      // 1. Incline Push-Ups (3s slow lower, press up)
+      if (exId === 'd1_e1') {
+        let t, ph;
+        if (p < 0.62) { t = ease(p / 0.62); ph = 'LOWER SLOWLY (3s)'; }
+        else if (p < 0.72) { t = 1; ph = 'CHEST TO EDGE'; }
+        else { t = 1 - ease((p - 0.72) / 0.28); ph = 'PRESS UP'; }
+
+        const bench = `<rect x="192" y="106" width="66" height="74" rx="5" fill="#1e293b" stroke="#475569" stroke-width="2"/>`;
+        const ankle = pt(48, 174);
+        const foot = pt(44, 180);
+        const wrist = pt(200, 106);
+
+        const shoulder = lerpPt(pt(186, 68), pt(196, 102), t);
+        const hip = lerpPt(pt(118, 118), pt(124, 136), t);
+        const knee = lerpPt(pt(83, 146), pt(86, 155), t);
+        const head = lerpPt(pt(204, 54), pt(214, 90), t);
+        const elbowN = lerpPt(pt(193, 88), pt(176, 118), t);
+        const elbowF = lerpPt(pt(198, 86), pt(182, 114), t);
+
+        svg = floorMat(180) + bench + drawSkeleton(
+          { head, shoulder, hip, kneeN: knee, kneeF: pt(knee.x - 4, knee.y + 2), ankleN: ankle, ankleF: pt(ankle.x - 4, ankle.y), footN: foot, elbowN, wristN: wrist, elbowF, wristF: pt(wrist.x + 5, wrist.y) },
+          { armNGlow: t > 0.35, glows: [{ p: shoulder, r: 16, i: t }] }
+        );
+        phase = ph;
+      }
+
+      // 2. Bodyweight Squats
+      else if (exId === 'd1_e2') {
+        let t, ph;
+        if (p < 0.45) { t = ease(p / 0.45); ph = 'SIT HIPS BACK'; }
+        else if (p < 0.58) { t = 1; ph = 'THIGHS PARALLEL'; }
+        else { t = 1 - ease((p - 0.58) / 0.42); ph = 'DRIVE THROUGH HEELS'; }
+
+        const ankleN = pt(142, 174), footN = pt(158, 176);
+        const ankleF = pt(132, 174), footF = pt(148, 176);
+        const kneeN = lerpPt(pt(144, 134), pt(164, 138), t);
+        const kneeF = lerpPt(pt(134, 134), pt(154, 138), t);
+        const hip = lerpPt(pt(136, 96), pt(106, 136), t);
+        const shoulder = lerpPt(pt(138, 48), pt(132, 92), t);
+        const head = lerpPt(pt(140, 29), pt(142, 74), t);
+        const elbowN = lerpPt(pt(136, 76), pt(164, 92), t);
+        const wristN = lerpPt(pt(140, 102), pt(194, 88), t);
+        const elbowF = lerpPt(pt(130, 76), pt(156, 90), t);
+        const wristF = lerpPt(pt(134, 102), pt(186, 86), t);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF, ankleN, ankleF, footN, footF, elbowN, wristN, elbowF, wristF },
+          { legNGlow: t > 0.3, legFGlow: t > 0.3, glows: [{ p: lerpPt(hip, kneeN, 0.5), r: 18, i: t }] }
+        );
+        phase = ph;
+      }
+
+      // 3. Overhead Tricep Extensions (Wrist-Friendly, 3s lower)
+      else if (exId === 'd1_e3') {
+        let t, ph;
+        if (p < 0.58) { t = ease(p / 0.58); ph = 'LOWER BEHIND HEAD (3s)'; }
+        else if (p < 0.68) { t = 1; ph = 'DEEP TRICEP STRETCH'; }
+        else { t = 1 - ease((p - 0.68) / 0.32); ph = 'EXTEND OVERHEAD'; }
+
+        const ankleN = pt(138, 174), footN = pt(154, 176);
+        const ankleF = pt(128, 174), footF = pt(144, 176);
+        const kneeN = pt(138, 136), kneeF = pt(128, 136);
+        const hip = pt(134, 100);
+        const shoulder = pt(134, 56);
+        const head = pt(138, 38);
+        // Upper arms stay locked vertically next to ears
+        const elbowN = pt(130, 24);
+        const elbowF = pt(138, 24);
+        // Forearms hinge behind head from straight up to behind upper back
+        const ang = lerp(-Math.PI / 2, -Math.PI * 1.18, t);
+        const foreLen = 28;
+        const wristN = pt(elbowN.x + Math.cos(ang) * foreLen, elbowN.y + Math.sin(ang) * foreLen);
+        const wristF = pt(elbowF.x + Math.cos(ang) * foreLen, elbowF.y + Math.sin(ang) * foreLen);
+
+        // Household weight / water jug held in both hands
+        const wCenter = lerpPt(wristN, wristF, 0.5);
+        const weight = `<g transform="translate(${wCenter.x.toFixed(1)},${wCenter.y.toFixed(1)}) rotate(${(t * -90).toFixed(1)})">
+          <rect x="-11" y="-8" width="22" height="16" rx="4" fill="#f59e0b" stroke="#fef3c7" stroke-width="1.5"/>
+          <line x1="-5" y1="0" x2="5" y2="0" stroke="#78350f" stroke-width="2.5" stroke-linecap="round"/>
+        </g>`;
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF, ankleN, ankleF, footN, footF, elbowN, wristN, elbowF, wristF },
+          { armNGlow: true, armFGlow: true, glows: [{ p: lerpPt(shoulder, elbowN, 0.5), r: 15, i: 0.4 + 0.6 * t }] }
+        ) + weight;
+        phase = ph;
+      }
+
+      // 4. Dead Bugs (Alternating opposite arm & leg)
+      else if (exId === 'd1_e4') {
+        const isFirstHalf = p < 0.5;
+        const sub = isFirstHalf ? p * 2 : (p - 0.5) * 2;
+        const t = sub < 0.5 ? ease(sub * 2) : 1 - ease((sub - 0.5) * 2);
+        phase = isFirstHalf ? (sub < 0.5 ? 'EXTEND RIGHT ARM + LEFT LEG' : 'RETURN TO CENTER') : (sub < 0.5 ? 'EXTEND LEFT ARM + RIGHT LEG' : 'RETURN TO CENTER');
+
+        const head = pt(56, 162);
+        const shoulder = pt(82, 168);
+        const hip = pt(154, 168);
+
+        const tN = isFirstHalf ? t : 0;
+        const tF = isFirstHalf ? 0 : t;
+
+        // Near arm & far leg move together; far arm & near leg move together
+        const elbowN = lerpPt(pt(82, 144), pt(52, 158), tN);
+        const wristN = lerpPt(pt(82, 120), pt(24, 158), tN);
+        const elbowF = lerpPt(pt(88, 144), pt(58, 158), tF);
+        const wristF = lerpPt(pt(88, 120), pt(30, 158), tF);
+
+        const kneeF = lerpPt(pt(154, 132), pt(194, 160), tN);
+        const ankleF = lerpPt(pt(188, 132), pt(234, 162), tN);
+        const kneeN = lerpPt(pt(148, 132), pt(190, 162), tF);
+        const ankleN = lerpPt(pt(182, 132), pt(230, 164), tF);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF, ankleN, ankleF, elbowN, wristN, elbowF, wristF },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.55), r: 18, i: 0.5 + 0.5 * t }] }
+        );
+      }
+
+      // 5. Forearm Plank (Isometric core & glute brace)
+      else if (exId === 'd1_e5') {
+        const pulse = ease(p < 0.5 ? p * 2 : (1 - p) * 2);
+        phase = p < 0.5 ? 'BRACE ABS & GLUTES' : 'BREATHE STEADY • HOLD';
+
+        const head = pt(56, 114 + pulse * 1.5);
+        const shoulder = pt(82, 122 + pulse * 1.5);
+        const hip = pt(152, 132);
+        const kneeN = pt(196, 152);
+        const ankleN = pt(234, 174);
+        const footN = pt(236, 180);
+        const elbowN = pt(82, 174);
+        const wristN = pt(56, 174);
+
+        const alignLine = `<line x1="68" y1="116" x2="236" y2="170" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="5 5" opacity="${(0.35 + 0.4 * pulse).toFixed(2)}"/>`;
+        svg = floorMat(180) + alignLine + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x - 4, kneeN.y + 2), ankleN, ankleF: pt(ankleN.x - 4, ankleN.y), footN, elbowN, wristN, elbowF: pt(elbowN.x + 6, elbowN.y), wristF: pt(wristN.x + 6, wristN.y) },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.55), r: 20, i: pulse }] }
+        );
+      }
+
+      // 6. Doorframe or Towel Rows (2s peak squeeze)
+      else if (exId === 'd2_e1') {
+        let t, ph;
+        if (p < 0.35) { t = ease(p / 0.35); ph = 'PULL CHEST FORWARD'; }
+        else if (p < 0.65) { t = 1; ph = 'SQUEEZE SHOULDER BLADES (2s)'; }
+        else { t = 1 - ease((p - 0.65) / 0.35); ph = 'LOWER WITH CONTROL'; }
+
+        const frame = `<rect x="208" y="18" width="14" height="162" rx="2" fill="#334155" stroke="#64748b" stroke-width="2"/>`;
+        const ankleN = pt(190, 174), footN = pt(204, 176);
+        const ankleF = pt(182, 174), footF = pt(196, 176);
+        const kneeN = lerpPt(pt(164, 140), pt(178, 138), t);
+        const hip = lerpPt(pt(138, 106), pt(164, 104), t);
+        const shoulder = lerpPt(pt(114, 68), pt(154, 62), t);
+        const head = lerpPt(pt(104, 50), pt(148, 44), t);
+        const wristN = pt(208, 76);
+        const elbowN = lerpPt(pt(160, 74), pt(132, 82), t);
+        const elbowF = lerpPt(pt(166, 72), pt(138, 80), t);
+
+        svg = floorMat(180) + frame + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x - 6, kneeN.y), ankleN, ankleF, footN, footF, elbowN, wristN, elbowF, wristF: pt(wristN.x, wristN.y - 3) },
+          { armNGlow: t > 0.4, glows: [{ p: shoulder, r: 17, i: t }] }
+        );
+        phase = ph;
+      }
+
+      // 7. Glute Bridges (2s top squeeze)
+      else if (exId === 'd2_e2') {
+        let t, ph;
+        if (p < 0.32) { t = ease(p / 0.32); ph = 'DRIVE THROUGH HEELS'; }
+        else if (p < 0.65) { t = 1; ph = 'SQUEEZE GLUTES (2s)'; }
+        else { t = 1 - ease((p - 0.65) / 0.35); ph = 'LOWER HIPS SLOWLY'; }
+
+        const head = pt(50, 162);
+        const shoulder = pt(74, 168);
+        const hip = lerpPt(pt(142, 172), pt(142, 126), t);
+        const kneeN = lerpPt(pt(184, 124), pt(188, 118), t);
+        const ankleN = pt(204, 174), footN = pt(220, 176);
+        const elbowN = pt(100, 174), wristN = pt(132, 174);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x - 6, kneeN.y + 2), ankleN, ankleF: pt(ankleN.x - 6, ankleN.y), footN, elbowN, wristN },
+          { legNGlow: t > 0.35, torsoGlow: t > 0.6, glows: [{ p: hip, r: 19, i: t }] }
+        );
+        phase = ph;
+      }
+
+      // 8. Reverse Lunges (Alternating sides)
+      else if (exId === 'd2_e3') {
+        const isRight = p < 0.5;
+        const sub = isRight ? p * 2 : (p - 0.5) * 2;
+        const t = sub < 0.45 ? ease(sub / 0.45) : (sub < 0.6 ? 1 : 1 - ease((sub - 0.6) / 0.4));
+        phase = sub < 0.45 ? 'STEP BACK & LOWER (90°)' : (sub < 0.6 ? 'HOLD BALANCE' : 'DRIVE UP FRONT HEEL');
+
+        const hip = lerpPt(pt(144, 96), pt(140, 128), t);
+        const shoulder = lerpPt(pt(144, 48), pt(142, 80), t);
+        const head = lerpPt(pt(146, 28), pt(144, 60), t);
+
+        const frontAnkle = pt(168, 174), frontFoot = pt(184, 176);
+        const frontKnee = lerpPt(pt(148, 136), pt(170, 134), t);
+        const backKnee = lerpPt(pt(140, 136), pt(110, 166), t);
+        const backAnkle = lerpPt(pt(140, 174), pt(78, 172), t);
+        const backFoot = lerpPt(pt(154, 176), pt(74, 180), t);
+
+        const elbowN = lerpPt(pt(140, 78), pt(136, 108), t);
+        const wristN = lerpPt(pt(144, 104), pt(156, 118), t);
+
+        const pose = isRight
+          ? { head, shoulder, hip, kneeN: frontKnee, ankleN: frontAnkle, footN: frontFoot, kneeF: backKnee, ankleF: backAnkle, footF: backFoot, elbowN, wristN }
+          : { head, shoulder, hip, kneeN: backKnee, ankleN: backAnkle, footN: backFoot, kneeF: frontKnee, ankleF: frontAnkle, footF: frontFoot, elbowN, wristN };
+
+        svg = floorMat(180) + drawSkeleton(pose, { legNGlow: t > 0.3, legFGlow: t > 0.3, glows: [{ p: lerpPt(hip, frontKnee, 0.5), r: 17, i: t }] });
+      }
+
+      // 9. Side Planks (Isometric oblique lift)
+      else if (exId === 'd2_e4') {
+        const pulse = ease(p < 0.5 ? p * 2 : (1 - p) * 2);
+        phase = p < 0.5 ? 'LIFT HIPS HIGH' : 'HOLD DIAGONAL LINE';
+
+        const head = pt(64, 94 - pulse * 2);
+        const shoulder = pt(86, 106 - pulse * 2);
+        const hip = pt(148, 134 - pulse * 3);
+        const kneeN = pt(190, 154);
+        const ankleN = pt(230, 174);
+        const elbowF = pt(86, 174), wristF = pt(62, 174);
+        const elbowN = pt(88, 72 - pulse * 2), wristN = pt(88, 40 - pulse * 2);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x, kneeN.y + 4), ankleN, ankleF: pt(ankleN.x, ankleN.y + 3), elbowN, wristN, elbowF, wristF },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.6), r: 19, i: 0.4 + 0.6 * pulse }] }
+        );
+      }
+
+      // 10. Bird-Dogs (Alternating opposite reach + 2s hold)
+      else if (exId === 'd2_e5') {
+        const isFirst = p < 0.5;
+        const sub = isFirst ? p * 2 : (p - 0.5) * 2;
+        const t = sub < 0.3 ? ease(sub / 0.3) : (sub < 0.7 ? 1 : 1 - ease((sub - 0.7) / 0.3));
+        phase = sub < 0.3 ? 'REACH OPPOSITE ARM & LEG' : (sub < 0.7 ? 'HOLD LEVEL HIPS (2s)' : 'RETURN UNDER CONTROL');
+
+        const head = pt(80, 96);
+        const shoulder = pt(102, 108);
+        const hip = pt(168, 108);
+
+        const tN = isFirst ? t : 0;
+        const tF = isFirst ? 0 : t;
+
+        const elbowN = lerpPt(pt(102, 142), pt(68, 104), tN);
+        const wristN = lerpPt(pt(102, 174), pt(34, 102), tN);
+        const elbowF = lerpPt(pt(108, 142), pt(74, 104), tF);
+        const wristF = lerpPt(pt(108, 174), pt(40, 102), tF);
+
+        const kneeF = lerpPt(pt(166, 172), pt(208, 108), tN);
+        const ankleF = lerpPt(pt(194, 174), pt(246, 108), tN);
+        const kneeN = lerpPt(pt(160, 172), pt(204, 110), tF);
+        const ankleN = lerpPt(pt(188, 174), pt(242, 110), tF);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF, ankleN, ankleF, elbowN, wristN, elbowF, wristF },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.55), r: 17, i: 0.3 + 0.7 * t }] }
+        );
+      }
+
+      // 11. Wall Sit (90-degree isometric hold)
+      else if (exId === 'd3_e1') {
+        const pulse = ease(p < 0.5 ? p * 2 : (1 - p) * 2);
+        phase = p < 0.5 ? 'BACK FLAT • 90° KNEES' : 'WEIGHT IN HEELS • HOLD';
+
+        const wall = `<rect x="74" y="18" width="14" height="162" rx="2" fill="#334155" stroke="#64748b" stroke-width="2"/>`;
+        const head = pt(102, 54);
+        const shoulder = pt(98, 74);
+        const hip = pt(98, 126);
+        const kneeN = pt(154, 126);
+        const ankleN = pt(154, 174), footN = pt(172, 176);
+        const elbowN = pt(102, 106), wristN = pt(122, 102);
+
+        svg = floorMat(180) + wall + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x - 6, kneeN.y + 2), ankleN, ankleF: pt(ankleN.x - 6, ankleN.y), footN, elbowN, wristN },
+          { legNGlow: true, legFGlow: true, glows: [{ p: lerpPt(hip, kneeN, 0.55), r: 19, i: 0.4 + 0.6 * pulse }] }
+        );
+      }
+
+      // 12. Push-Up to Shoulder Tap (Push-up + alternating shoulder taps)
+      else if (exId === 'd3_e2') {
+        let puT = 0, tapL = 0, tapR = 0;
+        if (p < 0.45) {
+          const s = p / 0.45;
+          puT = s < 0.5 ? ease(s * 2) : 1 - ease((s - 0.5) * 2);
+          phase = s < 0.5 ? 'LOWER PUSH-UP' : 'PRESS TO PLANK';
+        } else if (p < 0.72) {
+          const s = (p - 0.45) / 0.27;
+          tapL = s < 0.5 ? ease(s * 2) : 1 - ease((s - 0.5) * 2);
+          phase = 'TAP OPPOSITE SHOULDER (L)';
+        } else {
+          const s = (p - 0.72) / 0.28;
+          tapR = s < 0.5 ? ease(s * 2) : 1 - ease((s - 0.5) * 2);
+          phase = 'TAP OPPOSITE SHOULDER (R)';
+        }
+
+        const ankle = pt(46, 174), foot = pt(42, 180);
+        const shoulder = lerpPt(pt(184, 106), pt(188, 144), puT);
+        const hip = lerpPt(pt(116, 138), pt(118, 156), puT);
+        const knee = lerpPt(pt(82, 156), pt(82, 165), puT);
+        const head = lerpPt(pt(204, 96), pt(208, 136), puT);
+
+        const baseWristN = pt(186, 174);
+        const baseElbowN = lerpPt(pt(184, 140), pt(164, 152), puT);
+        const wristN = lerpPt(baseWristN, pt(shoulder.x + 2, shoulder.y + 4), tapL);
+        const elbowN = lerpPt(baseElbowN, pt(shoulder.x + 10, shoulder.y + 26), tapL);
+
+        const baseWristF = pt(194, 174);
+        const baseElbowF = lerpPt(pt(192, 140), pt(172, 152), puT);
+        const wristF = lerpPt(baseWristF, pt(shoulder.x - 2, shoulder.y + 4), tapR);
+        const elbowF = lerpPt(baseElbowF, pt(shoulder.x + 4, shoulder.y + 26), tapR);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN: knee, kneeF: pt(knee.x - 4, knee.y), ankleN: ankle, ankleF: pt(ankle.x - 4, ankle.y), footN: foot, elbowN, wristN, elbowF, wristF },
+          { torsoGlow: tapL > 0.2 || tapR > 0.2, armNGlow: puT > 0.3, glows: [{ p: hip, r: 16, i: Math.max(tapL, tapR) }] }
+        );
+      }
+
+      // 13. Calf Raises (Rise high + 1s top pause)
+      else if (exId === 'd3_e3') {
+        let t, ph;
+        if (p < 0.35) { t = ease(p / 0.35); ph = 'RISE ONTO TOES'; }
+        else if (p < 0.6) { t = 1; ph = 'PAUSE AT TOP (1s)'; }
+        else { t = 1 - ease((p - 0.6) / 0.4); ph = 'LOWER HEELS SLOWLY'; }
+
+        const lift = t * 18;
+        const wall = `<rect x="192" y="24" width="12" height="156" rx="2" fill="#334155" stroke="#64748b" stroke-width="2"/>`;
+        const footN = pt(148, 176);
+        const ankleN = pt(132, 174 - lift);
+        const kneeN = pt(134, 134 - lift);
+        const hip = pt(134, 96 - lift);
+        const shoulder = pt(136, 48 - lift);
+        const head = pt(138, 29 - lift);
+        const elbowN = pt(164, 62 - lift);
+        const wristN = pt(192, 62 - lift * 0.5);
+
+        svg = floorMat(180) + wall + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x - 8, kneeN.y), ankleN, ankleF: pt(ankleN.x - 8, ankleN.y), footN, footF: pt(footN.x - 8, footN.y), elbowN, wristN },
+          { calfGlow: t > 0.25, glows: [{ p: lerpPt(kneeN, ankleN, 0.55), r: 16, i: t }] }
+        );
+        phase = ph;
+      }
+
+      // 14. Lying Leg Raises (Raise + slow 3s lower)
+      else if (exId === 'd3_e4') {
+        let t, ph;
+        if (p < 0.32) { t = ease(p / 0.32); ph = 'RAISE LEGS UP'; }
+        else { t = 1 - ease((p - 0.32) / 0.68); ph = 'LOWER SLOWLY (3s)'; }
+
+        const head = pt(48, 162);
+        const shoulder = pt(74, 168);
+        const hip = pt(146, 170);
+        const ang = lerp(-0.1, -Math.PI / 2, t);
+        const kneeN = pt(hip.x + Math.cos(ang) * 44, hip.y + Math.sin(ang) * 44);
+        const ankleN = pt(hip.x + Math.cos(ang) * 84, hip.y + Math.sin(ang) * 84);
+        const elbowN = pt(106, 174), wristN = pt(140, 174);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF: pt(kneeN.x + 4, kneeN.y + 3), ankleN, ankleF: pt(ankleN.x + 4, ankleN.y + 3), elbowN, wristN },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.72), r: 18, i: 0.4 + 0.6 * (1 - t) }] }
+        );
+        phase = ph;
+      }
+
+      // 15. Slow Mountain Climbers (Alternating knee drives)
+      else {
+        const isFirst = p < 0.5;
+        const sub = isFirst ? p * 2 : (p - 0.5) * 2;
+        const t = sub < 0.5 ? ease(sub * 2) : 1 - ease((sub - 0.5) * 2);
+        phase = isFirst ? 'DRIVE LEFT KNEE SLOWLY' : 'DRIVE RIGHT KNEE SLOWLY';
+
+        const head = pt(56, 94);
+        const shoulder = pt(78, 106);
+        const hip = pt(148, 128);
+        const elbowN = pt(78, 140), wristN = pt(78, 174);
+        const elbowF = pt(84, 140), wristF = pt(84, 174);
+
+        const tN = isFirst ? t : 0;
+        const tF = isFirst ? 0 : t;
+
+        const kneeN = lerpPt(pt(190, 152), pt(120, 146), tN);
+        const ankleN = lerpPt(pt(230, 174), pt(144, 168), tN);
+        const kneeF = lerpPt(pt(194, 152), pt(124, 146), tF);
+        const ankleF = lerpPt(pt(234, 174), pt(148, 168), tF);
+
+        svg = floorMat(180) + drawSkeleton(
+          { head, shoulder, hip, kneeN, kneeF, ankleN, ankleF, elbowN, wristN, elbowF, wristF },
+          { torsoGlow: true, glows: [{ p: lerpPt(shoulder, hip, 0.6), r: 18, i: 0.4 + 0.6 * t }] }
+        );
+      }
+
+      return { svg, phase };
     }
 
     // --- Timer Engine ---
