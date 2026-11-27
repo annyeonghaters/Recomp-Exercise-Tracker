@@ -1,4 +1,4 @@
-const CACHE_NAME = 'recomp-tracker-v1';
+const CACHE_NAME = 'recomp-tracker-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -25,17 +25,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+
+  // Network-first: always pull latest from GitHub Pages when online, fallback to cache offline
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
+    fetch(event.request, { cache: 'no-cache' })
+      .then((response) => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
-      }).catch(() => caches.match('./index.html'));
-    })
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
   );
 });

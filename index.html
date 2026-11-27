@@ -162,6 +162,9 @@
     <button class="nav-item" data-view="history" onclick="setView('history')">📅 Workout History</button>
     <button class="nav-item" data-view="backup" onclick="setView('backup')">💾 Import / Export</button>
     <button class="nav-item" data-view="reminders" onclick="setView('reminders')">🔔 Reminders</button>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);">
+      <button class="nav-item" onclick="forceUpdatePWA()" style="margin-bottom:0;color:var(--accent);">🔄 Check for Updates</button>
+    </div>
   </aside>
 
   <!-- Main View Area -->
@@ -192,11 +195,37 @@
   </div>
 
   <script>
-    // --- PWA Service Worker Registration & Install Prompt ---
+    // --- PWA Service Worker Registration & Instant Updates ---
+    let swReg = null;
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+          swReg = reg;
+          reg.update().catch(() => {});
+        }).catch(() => {});
       });
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+    }
+
+    async function forceUpdatePWA() {
+      closeDrawer(true);
+      showToast('Checking for updates...');
+      try {
+        if (swReg) await swReg.update();
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        window.location.reload(true);
+      } catch (e) {
+        window.location.reload();
+      }
     }
     let deferredPrompt = null;
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -452,72 +481,198 @@
       }
     });
 
-    // --- Offline Animated SVG Form Demos ---
+    // --- Offline Animated SVG Form Demos (All 15 Exercises) ---
     function getAnimatedSVG(type) {
-      const style = `
-        <style>
-          .limb { stroke:#38bdf8; stroke-width:6; stroke-linecap:round; fill:none; }
-          .hl { stroke:#22c55e; stroke-width:7; stroke-linecap:round; fill:none; }
-          .head { fill:#f8fafc; }
-          .floor { stroke:#334155; stroke-width:3; }
-          .bob { animation: bob 2.2s ease-in-out infinite; transform-origin: center; }
-          .pulse { animation: pulse 2s ease-in-out infinite; }
-          @keyframes bob { 0%,100%{ transform: translateY(0px); } 50%{ transform: translateY(14px); } }
-          @keyframes pulse { 0%,100%{ opacity: 0.45; } 50%{ opacity: 1; } }
-        </style>`;
-      if (type === 'tricep') {
-        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
-          <line class="floor" x1="20" y1="165" x2="200" y2="165"/>
-          <circle class="head" cx="110" cy="54" r="13"/>
-          <line class="limb" x1="110" y1="67" x2="110" y2="122"/>
-          <line class="limb" x1="110" y1="122" x2="96" y2="163"/>
-          <line class="limb" x1="110" y1="122" x2="124" y2="163"/>
-          <!-- Upper arms tucked vertical -->
-          <line class="hl" x1="110" y1="74" x2="96" y2="34"/>
-          <line class="hl" x1="110" y1="74" x2="124" y2="34"/>
-          <!-- Animated Forearms + Weight -->
-          <g class="bob">
-            <line class="limb" x1="96" y1="34" x2="110" y2="16"/>
-            <line class="limb" x1="124" y1="34" x2="110" y2="16"/>
-            <rect x="98" y="8" width="24" height="14" rx="4" fill="#f59e0b"/>
+      const base = `
+        <line x1="16" y1="158" x2="204" y2="158" stroke="#334155" stroke-width="3" stroke-linecap="round"/>
+      `;
+      const s = 'stroke="#38bdf8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+      const hl = 'stroke="#22c55e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+      const head = 'fill="#f8fafc"';
+      const prop = 'fill="#334155" stroke="#475569" stroke-width="2"';
+
+      const svgs = {
+        pushup: `
+          ${base}
+          <rect x="148" y="102" width="46" height="56" rx="4" ${prop}/>
+          <g>
+            <animateTransform attributeName="transform" type="rotate" values="0 46 152; 16 46 152; 0 46 152" dur="2.6s" repeatCount="indefinite"/>
+            <line x1="46" y1="152" x2="132" y2="96" ${s}/>
+            <circle cx="144" cy="86" r="11" ${head}/>
+            <line x1="126" y1="100" x2="154" y2="104" ${hl}/>
           </g>
-          <text x="110" y="177" fill="#94a3b8" font-size="10" text-anchor="middle">Elbows Tucked • Neutral Wrists • 3s Lower</text>
-        </svg>`;
-      }
-      if (type === 'squat' || type === 'lunge' || type === 'wallsit') {
-        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
-          <line class="floor" x1="20" y1="162" x2="200" y2="162"/>
-          <g class="bob">
-            <circle class="head" cx="110" cy="40" r="13"/>
-            <line class="limb" x1="110" y1="53" x2="105" y2="102"/>
-            <line class="limb" x1="108" y1="65" x2="144" y2="74"/>
-            <line class="hl" x1="105" y1="102" x2="132" y2="124"/>
-            <line class="hl" x1="132" y1="124" x2="112" y2="160"/>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Incline Push-Up • 3s Lower • Straight Line</text>
+        `,
+        squat: `
+          ${base}
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0; 0 26; 0 0" dur="2.4s" repeatCount="indefinite"/>
+            <circle cx="110" cy="40" r="11" ${head}/>
+            <line x1="110" y1="51" x2="104" y2="96" ${s}/>
+            <line x1="108" y1="62" x2="146" y2="66" ${s}/>
           </g>
-          <text x="110" y="176" fill="#94a3b8" font-size="10" text-anchor="middle">Chest Up • Weight in Heels • Controlled Tempo</text>
-        </svg>`;
-      }
-      if (type === 'plank' || type === 'sideplank' || type === 'climber') {
-        return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
-          <line class="floor" x1="16" y1="145" x2="204" y2="145"/>
-          <circle class="head" cx="54" cy="96" r="12"/>
-          <line class="hl pulse" x1="66" y1="102" x2="132" y2="112"/>
-          <line class="limb" x1="132" y1="112" x2="184" y2="142"/>
-          <line class="limb" x1="72" y1="104" x2="72" y2="142"/>
-          <line class="limb" x1="72" y1="142" x2="54" y2="142"/>
-          <text x="110" y="168" fill="#94a3b8" font-size="10" text-anchor="middle">Brace Core • Flat Back • Steady Breathing</text>
-        </svg>`;
-      }
-      return `<svg viewBox="0 0 220 180" width="220" height="180">${style}
-        <line class="floor" x1="20" y1="152" x2="200" y2="152"/>
-        <g class="bob">
-          <circle class="head" cx="72" cy="84" r="12"/>
-          <line class="hl" x1="84" y1="90" x2="146" y2="116"/>
-          <line class="limb" x1="146" y1="116" x2="182" y2="148"/>
-          <line class="limb" x1="90" y1="94" x2="78" y2="148"/>
-        </g>
-        <text x="110" y="172" fill="#94a3b8" font-size="10" text-anchor="middle">Controlled Form • Full Range of Motion</text>
-      </svg>`;
+          <polyline ${hl}>
+            <animate attributeName="points" values="104,96 112,126 110,156; 104,122 134,126 110,156; 104,96 112,126 110,156" dur="2.4s" repeatCount="indefinite"/>
+          </polyline>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Bodyweight Squat • Hips Back • Heels Flat</text>
+        `,
+        tricep: `
+          ${base}
+          <circle cx="110" cy="54" r="11" ${head}/>
+          <line x1="110" y1="65" x2="110" y2="116" ${s}/>
+          <line x1="110" y1="116" x2="96" y2="156" ${s}/>
+          <line x1="110" y1="116" x2="124" y2="156" ${s}/>
+          <line x1="110" y1="74" x2="98" y2="34" ${hl}/>
+          <line x1="110" y1="74" x2="122" y2="34" ${hl}/>
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0; 0 22; 0 0" dur="2.6s" repeatCount="indefinite"/>
+            <line x1="98" y1="34" x2="110" y2="16" ${s}/>
+            <line x1="122" y1="34" x2="110" y2="16" ${s}/>
+            <rect x="98" y="8" width="24" height="12" rx="4" fill="#f59e0b"/>
+          </g>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Overhead Tricep Ext • Elbows Tucked • Neutral Wrists</text>
+        `,
+        deadbug: `
+          ${base}
+          <circle cx="52" cy="142" r="10" ${head}/>
+          <line x1="62" y1="146" x2="132" y2="146" ${hl}/>
+          <!-- Opposite arm & leg extending -->
+          <line x1="78" y1="146" ${s}>
+            <animate attributeName="x2" values="78; 34; 78" dur="2.8s" repeatCount="indefinite"/>
+            <animate attributeName="y2" values="104; 138; 104" dur="2.8s" repeatCount="indefinite"/>
+          </line>
+          <polyline ${s}>
+            <animate attributeName="points" values="132,146 132,110 162,110; 132,146 164,140 192,140; 132,146 132,110 162,110" dur="2.8s" repeatCount="indefinite"/>
+          </polyline>
+          <!-- Static opposite arm/leg -->
+          <line x1="84" y1="146" x2="84" y2="108" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+          <polyline points="126,146 126,114 152,114" stroke="#64748b" stroke-width="5" stroke-linecap="round" fill="none"/>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Dead Bug • Lower Back Flat • Opposite Arm & Leg</text>
+        `,
+        plank: `
+          ${base}
+          <circle cx="52" cy="106" r="10" ${head}/>
+          <line x1="62" y1="112" x2="134" y2="120" ${hl}>
+            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
+          </line>
+          <line x1="134" y1="120" x2="184" y2="154" ${s}/>
+          <polyline points="72,114 72,154 54,154" ${s}/>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Forearm Plank • Brace Abs • Hold Steady</text>
+        `,
+        row: `
+          ${base}
+          <rect x="164" y="24" width="12" height="134" rx="2" ${prop}/>
+          <g>
+            <animateTransform attributeName="transform" type="rotate" values="-22 146 154; -6 146 154; -22 146 154" dur="2.4s" repeatCount="indefinite"/>
+            <line x1="146" y1="154" x2="112" y2="74" ${s}/>
+            <circle cx="106" cy="58" r="11" ${head}/>
+            <line x1="116" y1="84" x2="164" y2="84" ${hl}/>
+          </g>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Doorframe Row • Squeeze Shoulder Blades 2s</text>
+        `,
+        bridge: `
+          ${base}
+          <circle cx="48" cy="144" r="10" ${head}/>
+          <line x1="58" y1="148" x2="122" y2="148" ${hl}>
+            <animate attributeName="y2" values="148; 110; 148" dur="2.6s" repeatCount="indefinite"/>
+          </line>
+          <polyline ${s}>
+            <animate attributeName="points" values="122,148 156,112 168,156; 122,110 156,112 168,156; 122,148 156,112 168,156" dur="2.6s" repeatCount="indefinite"/>
+          </polyline>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Glute Bridge • Drive Through Heels • 2s Squeeze</text>
+        `,
+        lunge: `
+          ${base}
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0; 0 22; 0 0" dur="2.4s" repeatCount="indefinite"/>
+            <circle cx="110" cy="40" r="11" ${head}/>
+            <line x1="110" y1="51" x2="110" y2="96" ${s}/>
+          </g>
+          <!-- Front leg -->
+          <polyline ${hl}>
+            <animate attributeName="points" values="110,96 122,126 132,156; 110,118 136,120 136,156; 110,96 122,126 132,156" dur="2.4s" repeatCount="indefinite"/>
+          </polyline>
+          <!-- Back leg stepping back -->
+          <polyline ${s}>
+            <animate attributeName="points" values="110,96 98,126 92,156; 110,118 82,152 60,154; 110,96 98,126 92,156" dur="2.4s" repeatCount="indefinite"/>
+          </polyline>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Reverse Lunge • 90° Knees • Push Front Heel</text>
+        `,
+        sideplank: `
+          ${base}
+          <circle cx="58" cy="86" r="10" ${head}/>
+          <line x1="68" y1="94" x2="178" y2="152" ${hl}>
+            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
+          </line>
+          <polyline points="74,98 74,154 58,154" ${s}/>
+          <line x1="94" y1="108" x2="94" y2="70" ${s}/>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Side Plank • Hips Lifted • Straight Diagonal</text>
+        `,
+        birddog: `
+          ${base}
+          <circle cx="72" cy="96" r="10" ${head}/>
+          <line x1="82" y1="104" x2="140" y2="104" ${hl}/>
+          <!-- Supporting arm & leg -->
+          <line x1="88" y1="104" x2="88" y2="154" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+          <polyline points="136,104 136,154 156,154" stroke="#64748b" stroke-width="5" stroke-linecap="round" fill="none"/>
+          <!-- Extending opposite arm & leg -->
+          <line x1="84" y1="104" ${s}>
+            <animate attributeName="x2" values="84; 34; 84" dur="2.8s" repeatCount="indefinite"/>
+            <animate attributeName="y2" values="148; 100; 148" dur="2.8s" repeatCount="indefinite"/>
+          </line>
+          <line x1="140" y1="104" ${s}>
+            <animate attributeName="x2" values="140; 194; 140" dur="2.8s" repeatCount="indefinite"/>
+            <animate attributeName="y2" values="150; 100; 150" dur="2.8s" repeatCount="indefinite"/>
+          </line>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Bird-Dog • Level Hips • 2s Extension Hold</text>
+        `,
+        wallsit: `
+          ${base}
+          <rect x="64" y="24" width="12" height="134" rx="2" ${prop}/>
+          <circle cx="88" cy="56" r="11" ${head}/>
+          <line x1="84" y1="67" x2="84" y2="112" ${s}/>
+          <polyline points="84,112 132,112 132,156" ${hl}>
+            <animate attributeName="opacity" values="0.65; 1; 0.65" dur="2s" repeatCount="indefinite"/>
+          </polyline>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Wall Sit • 90° Knees • Hold Isometric</text>
+        `,
+        calf: `
+          ${base}
+          <g>
+            <animateTransform attributeName="transform" type="translate" values="0 0; 0 -14; 0 0" dur="2s" repeatCount="indefinite"/>
+            <circle cx="110" cy="40" r="11" ${head}/>
+            <line x1="110" y1="51" x2="110" y2="104" ${s}/>
+            <line x1="110" y1="104" x2="104" y2="152" ${hl}/>
+            <line x1="110" y1="104" x2="116" y2="152" ${hl}/>
+          </g>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Calf Raises • Rise High • 1s Top Pause</text>
+        `,
+        legraise: `
+          ${base}
+          <circle cx="48" cy="144" r="10" ${head}/>
+          <line x1="58" y1="148" x2="122" y2="148" ${hl}/>
+          <line x1="122" y1="148" ${s}>
+            <animate attributeName="x2" values="188; 124; 188" dur="2.8s" repeatCount="indefinite"/>
+            <animate attributeName="y2" values="140; 82; 140" dur="2.8s" repeatCount="indefinite"/>
+          </line>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Lying Leg Raises • Lower Back Pressed Flat</text>
+        `,
+        climber: `
+          ${base}
+          <circle cx="52" cy="90" r="10" ${head}/>
+          <line x1="62" y1="98" x2="132" y2="116" ${hl}/>
+          <line x1="72" y1="100" x2="72" y2="154" ${s}/>
+          <!-- Driving knee -->
+          <polyline ${s}>
+            <animate attributeName="points" values="132,116 158,136 184,154; 132,116 102,130 120,148; 132,116 158,136 184,154" dur="1.8s" repeatCount="indefinite"/>
+          </polyline>
+          <line x1="132" y1="116" x2="180" y2="154" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+          <text x="110" y="174" fill="#94a3b8" font-size="10" text-anchor="middle">Slow Mountain Climbers • Keep Hips Level</text>
+        `
+      };
+
+      const body = svgs[type] || svgs.pushup;
+      return `<svg viewBox="0 0 220 182" width="220" height="182" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
     }
 
     // --- Timer Engine ---
