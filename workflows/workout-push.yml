@@ -1,1 +1,65 @@
+name: OneSignal Workout Push
 
+on:
+  schedule:
+    # Runs every 30 minutes; TZ=America/New_York handles EST/EDT automatically
+    - cron: '0,30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send OneSignal Web Push
+        env:
+          ONESIGNAL_APP_ID: ${{ secrets.ONESIGNAL_APP_ID }}
+          ONESIGNAL_API_KEY: ${{ secrets.ONESIGNAL_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          DOW=$(TZ="America/New_York" date +%w)
+          HH=$(TZ="America/New_York" date +%H)
+          MM=$(TZ="America/New_York" date +%M)
+
+          if [ "$((10#$MM))" -lt 30 ]; then
+            SLOT="${HH}:00"
+          else
+            SLOT="${HH}:30"
+          fi
+
+          case "$DOW" in
+            1) BODY="Day 1: Push, Squat & Deep Core. Tap to start." ;;
+            3) BODY="Day 2: Pull, Hinge & Obliques. Tap to start." ;;
+            5) BODY="Day 3: Endurance & Core Stability. Tap to start." ;;
+            *) BODY="Tap to open your tracker and start today's session." ;;
+          esac
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            PAYLOAD=$(cat <<EOF
+          {
+            "app_id": "${ONESIGNAL_APP_ID}",
+            "included_segments": ["Total Subscriptions"],
+            "headings": {"en": "3-Day Recomp Tracker (Test)"},
+            "contents": {"en": "${BODY}"},
+            "url": "https://annyeonghaters.github.io/Recomp-Exercise-Tracker/"
+          }
+          EOF
+          )
+          else
+            PAYLOAD=$(cat <<EOF
+          {
+            "app_id": "${ONESIGNAL_APP_ID}",
+            "filters": [
+              {"field": "tag", "key": "remind_slot", "relation": "=", "value": "${SLOT}"},
+              {"operator": "AND"},
+              {"field": "tag", "key": "d${DOW}", "relation": "=", "value": "1"}
+            ],
+            "headings": {"en": "Time for Your 3-Day Recomp Workout"},
+            "contents": {"en": "${BODY}"},
+            "url": "https://annyeonghaters.github.io/Recomp-Exercise-Tracker/"
+          }
+          EOF
+          )
+          fi
+
+          echo "Checking slot=${SLOT} dow=${DOW} (event=${EVENT_NAME})"
+          curl --fail-with-body --silent --show-error             --request POST             --url 'https://api.onesignal.com/notifications?c=push'             --header "Authorization: Key ${ONESIGNAL_API_KEY}"             --header 'Content-Type: application/json'             --data "${PAYLOAD}"
